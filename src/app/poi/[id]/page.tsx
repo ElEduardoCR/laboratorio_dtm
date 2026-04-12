@@ -126,6 +126,15 @@ export default function POIDetail() {
             <p className="text-gray-500 mt-1 flex items-center">
               {poi.location}
             </p>
+            <span
+              className={`inline-block mt-2 text-xs font-medium px-2 py-0.5 rounded-full ${
+                poi.zone === "rural"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-sky-100 text-sky-700"
+              }`}
+            >
+              {poi.zone === "rural" ? "🌾 Zona Rural" : "🏙️ Zona Urbana"}
+            </span>
           </div>
           <div className={`px-4 py-2 rounded-full text-sm font-bold uppercase tracking-wider ${poi.is_operational ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
             {poi.is_operational ? "Estado: Operacional" : "Estado: Inactiva"}
