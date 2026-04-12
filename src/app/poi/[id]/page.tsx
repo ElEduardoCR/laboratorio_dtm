@@ -63,41 +63,7 @@ export default function POIDetail() {
     setDaysLeft(diffDays % 30);
   };
 
-  const handleRevisionDiaria = async () => {
-    const cl_input = window.prompt("Lectura de Cloro de Entrada:", poi.chlorine_input?.toString() || "");
-    if (cl_input === null) return;
-    const cl_output = window.prompt("Lectura de Cloro de Salida:", poi.chlorine_output?.toString() || "");
-    if (cl_output === null) return;
 
-    await supabase.from('poi').update({
-      chlorine_input: parseFloat(cl_input),
-      chlorine_output: parseFloat(cl_output)
-    }).eq('id', id);
-
-    fetchPoiData();
-  };
-
-  const handleRevisionSemanal = async () => {
-    const d_softer = window.prompt("Dureza después del Suavizador:", poi.hardness_softener?.toString() || "");
-    if (d_softer === null) return;
-    const d_final = window.prompt("Dureza en Producto Final:", poi.hardness_product?.toString() || "");
-    if (d_final === null) return;
-
-    // Optional: Also ask for filter change
-    const changedFilter = window.confirm("¿Se cambió el Filtro de Sedimentos durante esta revisión?");
-    
-    const updates: any = {
-      hardness_softener: parseFloat(d_softer),
-      hardness_product: parseFloat(d_final)
-    };
-
-    if (changedFilter) {
-      updates.last_filter_change = new Date().toISOString();
-    }
-
-    await supabase.from('poi').update(updates).eq('id', id);
-    fetchPoiData();
-  };
 
   if (loading) {
     return (
@@ -209,20 +175,20 @@ export default function POIDetail() {
       <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200">
         <h3 className="text-lg font-bold text-gray-800 mb-4">Opciones de Mantenimiento</h3>
         <div className="flex flex-col sm:flex-row gap-4">
-          <button 
-            onClick={handleRevisionDiaria}
+          <Link
+            href={`/poi/${id}/revision-diaria`}
             className="flex-1 flex justify-center items-center gap-2 bg-dtm-blue text-white py-3 px-4 rounded-xl hover:bg-blue-800 font-semibold shadow-sm transition-all"
           >
             <Edit3 className="w-5 h-5" />
             Revisión Diaria
-          </button>
-          <button 
-            onClick={handleRevisionSemanal}
+          </Link>
+          <Link
+            href={`/poi/${id}/revision-semanal`}
             className="flex-1 flex justify-center items-center gap-2 bg-white text-dtm-blue border-2 border-dtm-blue py-3 px-4 rounded-xl hover:bg-blue-50 font-semibold shadow-sm transition-all"
           >
             <Settings className="w-5 h-5" />
             Revisión Semanal
-          </button>
+          </Link>
         </div>
       </div>
 
