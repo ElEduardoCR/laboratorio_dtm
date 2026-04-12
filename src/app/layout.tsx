@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Image from "next/image";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,21 +29,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-white">
-        <header className="bg-dtm-blue w-full p-4 flex items-center justify-between shadow-md">
-          <div className="flex items-center gap-4">
-            <Image
-              src="/logos/logojmas.png"
-              alt="Logo JMAS"
-              width={180}
-              height={60}
-              className="object-contain"
-              priority
-            />
-          </div>
-          <div className="text-white font-semibold text-lg hidden sm:block">
-            Sistema de Gestión Administrativa
-          </div>
-        </header>
+
 
         <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 flex flex-col">
           {children}

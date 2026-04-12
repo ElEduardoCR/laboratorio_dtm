@@ -1,11 +1,79 @@
+import Link from "next/link";
+import { Activity, Droplet, Wrench, Cylinder, Box, DollarSign } from "lucide-react";
+
 export default function Home() {
+  const modules = [
+    {
+      id: "poi",
+      name: "Plantas de Ósmosis Inversa",
+      icon: <Activity className="w-8 h-8 md:w-12 md:h-12 mb-4 text-dtm-blue group-hover:scale-110 transition-transform duration-300" />,
+      href: "/poi",
+      active: true,
+      description: "Manejo y métricas de POI"
+    },
+    {
+      id: "pozos",
+      name: "Pozos",
+      icon: <Droplet className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
+      href: "#",
+      active: false,
+      description: "Próximamente"
+    },
+    {
+      id: "mantenimiento",
+      name: "Eventos de Mantenimiento",
+      icon: <Wrench className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
+      href: "#",
+      active: false,
+      description: "Próximamente"
+    },
+    {
+      id: "cilindros",
+      name: "Cilindros de Gas-Cloro",
+      icon: <Cylinder className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
+      href: "#",
+      active: false,
+      description: "Próximamente"
+    },
+    {
+      id: "inventario",
+      name: "Inventario",
+      icon: <Box className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
+      href: "#",
+      active: false,
+      description: "Próximamente"
+    },
+    {
+      id: "recaudacion",
+      name: "Recaudación",
+      icon: <DollarSign className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
+      href: "#",
+      active: false,
+      description: "Próximamente"
+    }
+  ];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center">
-      <div className="text-center space-y-6">
-        <h1 className="text-4xl font-bold text-dtm-blue">Bienvenido al Sistema DTM</h1>
-        <p className="text-gray-600 max-w-xl mx-auto text-lg">
-          La base de datos y la interfaz inicial están configuradas. Ya puedes comenzar a programar los módulos de gestión.
-        </p>
+    <div className="flex-1 w-full max-w-6xl mx-auto py-8">
+      <h1 className="text-3xl font-bold text-gray-800 mb-2">Panel Principal</h1>
+      <p className="text-gray-500 mb-8">Seleccione un módulo para gestionar o revisar el estado del sistema.</p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {modules.map((mod) => (
+          mod.active ? (
+            <Link key={mod.id} href={mod.href} className="group flex flex-col items-center justify-center p-8 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-xl hover:border-dtm-blue transition-all duration-300">
+              {mod.icon}
+              <h2 className="text-lg md:text-xl font-semibold text-gray-800 text-center">{mod.name}</h2>
+              <p className="text-sm text-gray-500 mt-2 text-center">{mod.description}</p>
+            </Link>
+          ) : (
+            <div key={mod.id} className="flex flex-col items-center justify-center p-8 bg-gray-50 border border-gray-100 rounded-2xl opacity-70 cursor-not-allowed">
+              {mod.icon}
+              <h2 className="text-lg md:text-xl font-semibold text-gray-500 text-center">{mod.name}</h2>
+              <span className="mt-3 px-3 py-1 bg-gray-200 text-gray-600 text-xs font-medium rounded-full uppercase tracking-widest">{mod.description}</span>
+            </div>
+          )
+        ))}
       </div>
     </div>
   );
