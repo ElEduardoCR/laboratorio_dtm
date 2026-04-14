@@ -119,12 +119,13 @@ export default function RevisionDiaria() {
     file: File
   ): Promise<string | null> => {
     const todayStr = getTodayMexicoCity();
-    const ext = file.name.split(".").pop() || "jpg";
+    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
     const path = `${poiId}/${todayStr}/${key}.${ext}`;
+    const contentType = file.type || "image/jpeg";
 
     const { error } = await supabase.storage
       .from("review-photos")
-      .upload(path, file, { upsert: true });
+      .upload(path, file, { upsert: true, contentType });
 
     if (error) {
       console.error(`Error uploading ${key}:`, error);
@@ -172,6 +173,7 @@ export default function RevisionDiaria() {
     const { error } = await supabase.from("daily_reviews").insert([
       {
         poi_id: poiId,
+        chlorine_residual: parseFloat(form.chlorine_input),
         chlorine_input: parseFloat(form.chlorine_input),
         chlorine_output: parseFloat(form.chlorine_output),
         hardness_input: parseFloat(form.hardness_input),
@@ -518,7 +520,6 @@ function PhotoInput({
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         id={`file-${fieldKey}`}
         onChange={(e) => {
