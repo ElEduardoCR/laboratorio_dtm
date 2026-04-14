@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { PlusCircle, MapPin, Activity } from "lucide-react";
+import { PlusCircle, MapPin, Activity, ArrowLeft } from "lucide-react";
 import { supabase } from "@/utils/supabase/client";
 
 export default function POIList() {
@@ -30,6 +30,13 @@ export default function POIList() {
 
   return (
     <div className="w-full max-w-6xl mx-auto py-8">
+      <Link
+        href="/"
+        className="inline-flex items-center text-dtm-blue hover:underline mb-6 font-medium"
+      >
+        <ArrowLeft className="w-4 h-4 mr-1" />
+        Regresar al Dashboard
+      </Link>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">
