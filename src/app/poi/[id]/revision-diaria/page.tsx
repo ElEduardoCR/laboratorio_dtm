@@ -206,6 +206,30 @@ export default function RevisionDiaria() {
       })
       .eq("id", poiId);
 
+    // Update assigned tank weight (if any)
+    const cylinderWeight = parseFloat(form.cylinder_weight);
+    const { data: assignedTank } = await supabase
+      .from("tanks")
+      .select("id")
+      .eq("current_poi_id", poiId)
+      .eq("status", "asignado")
+      .maybeSingle();
+    if (assignedTank) {
+      await supabase
+        .from("tanks")
+        .update({ current_weight_kg: cylinderWeight })
+        .eq("id", assignedTank.id);
+      await supabase.from("tank_events").insert([
+        {
+          tank_id: assignedTank.id,
+          event_type: "lectura_peso",
+          poi_id: poiId,
+          weight_kg: cylinderWeight,
+          notes: "Lectura de revisión diaria",
+        },
+      ]);
+    }
+
     setAlreadySubmitted(true);
     setSaving(false);
   };

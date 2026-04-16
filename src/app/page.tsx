@@ -29,11 +29,11 @@ export default function Home() {
     },
     {
       id: "cilindros",
-      name: "Cilindros de Gas-Cloro",
-      icon: <Cylinder className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
-      href: "#",
-      active: false,
-      description: "Próximamente"
+      name: "Tanques de Gas-Cloro",
+      icon: <Cylinder className="w-8 h-8 md:w-12 md:h-12 mb-4 text-dtm-blue group-hover:scale-110 transition-transform duration-300" />,
+      href: "/tanques",
+      active: true,
+      description: "Inventario y trazabilidad de tanques"
     },
     {
       id: "inventario",
