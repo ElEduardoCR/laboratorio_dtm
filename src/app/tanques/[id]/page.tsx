@@ -69,12 +69,7 @@ const EVENT_LABELS: Record<string, string> = {
   lectura_peso: "Lectura de peso (revisión)",
 };
 
-type ActionMode =
-  | null
-  | "asignar"
-  | "retirar"
-  | "recibir"
-  | "baja";
+type ActionMode = null | "asignar" | "retirar" | "baja";
 
 export default function TanqueDetalle() {
   const params = useParams();
@@ -97,9 +92,6 @@ export default function TanqueDetalle() {
     id: string;
     identifier: string;
   } | null>(null);
-
-  // Recibir
-  const [refilledWeight, setRefilledWeight] = useState("");
 
   // Baja
   const [certFile, setCertFile] = useState<File | null>(null);
@@ -173,7 +165,6 @@ export default function TanqueDetalle() {
     setActionError("");
     setSelectedPoiId("");
     setPoiCurrentTank(null);
-    setRefilledWeight("");
     setCertFile(null);
     setCertPreview("");
     setBajaNotes("");
@@ -259,31 +250,6 @@ export default function TanqueDetalle() {
         tank_id: tank.id,
         event_type: "retiro",
         poi_id: previousPoiId,
-      },
-    ]);
-    resetActionState();
-    setSaving(false);
-    load();
-  };
-
-  const handleRecibir = async () => {
-    if (!tank || saving) return;
-    const w = parseFloat(refilledWeight);
-    if (!w || w <= 0) {
-      setActionError("Ingresa el peso del tanque rellenado.");
-      return;
-    }
-    setSaving(true);
-    setActionError("");
-    await supabase
-      .from("tanks")
-      .update({ status: "almacen", current_weight_kg: w })
-      .eq("id", tank.id);
-    await supabase.from("tank_events").insert([
-      {
-        tank_id: tank.id,
-        event_type: "recibido_proveedor",
-        weight_kg: w,
       },
     ]);
     resetActionState();
@@ -461,16 +427,12 @@ export default function TanqueDetalle() {
               </button>
             )}
             {tank.status === "en_proveedor" && (
-              <button
-                onClick={() => setMode(mode === "recibir" ? null : "recibir")}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
-                  mode === "recibir"
-                    ? "bg-green-600 text-white"
-                    : "bg-green-50 text-green-700 hover:bg-green-100"
-                }`}
+              <Link
+                href="/tanques/recibir-proveedor"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
               >
                 <PackageCheck className="w-4 h-4" /> Recibir del Proveedor
-              </button>
+              </Link>
             )}
             {tank.status === "almacen" && (
               <Link
@@ -563,52 +525,6 @@ export default function TanqueDetalle() {
                   className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 disabled:opacity-50"
                 >
                   {saving ? "Guardando..." : "Confirmar Retiro"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {mode === "recibir" && (
-            <div className="border-t border-gray-100 pt-4 space-y-4">
-              <p className="text-sm text-gray-600">
-                Confirma que el tanque regresó del proveedor (GSG Supplies S.
-                de R.L. de C.V.) e ingresa el peso al recibirlo.
-              </p>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Peso al recibir
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="any"
-                    value={refilledWeight}
-                    onChange={(e) => setRefilledWeight(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 pr-12 text-gray-800 focus:outline-none focus:ring-2 focus:ring-dtm-blue"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
-                    KG
-                  </span>
-                </div>
-              </div>
-              {actionError && (
-                <p className="text-sm text-red-600">{actionError}</p>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={resetActionState}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleRecibir}
-                  disabled={saving}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50"
-                >
-                  {saving ? "Guardando..." : "Confirmar Recepción"}
                 </button>
               </div>
             </div>

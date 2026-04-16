@@ -9,6 +9,7 @@ import {
   Cylinder,
   Truck,
   PackageCheck,
+  AlertCircle,
 } from "lucide-react";
 
 type Tank = {
@@ -90,6 +91,13 @@ export default function TanquesList() {
           >
             <Truck className="w-4 h-4" />
             Enviar a Proveedor
+          </Link>
+          <Link
+            href="/tanques/recibir-proveedor"
+            className="inline-flex items-center gap-2 bg-white text-green-700 border-2 border-green-300 px-4 py-2 rounded-xl font-semibold hover:bg-green-50 transition-colors"
+          >
+            <PackageCheck className="w-4 h-4" />
+            Recibir de Proveedor
           </Link>
           <Link
             href="/tanques/nuevo"
@@ -198,8 +206,20 @@ export default function TanquesList() {
                   </div>
                   {lowFuel && (
                     <p className="text-[11px] text-red-600 font-medium mt-1 flex items-center gap-1">
-                      <PackageCheck className="w-3 h-3" />
+                      <AlertCircle className="w-3 h-3" />
                       Próximo a agotarse
+                    </p>
+                  )}
+                  {t.status === "almacen" && pct >= 80 && (
+                    <p className="text-[11px] text-green-700 font-medium mt-1 flex items-center gap-1">
+                      <PackageCheck className="w-3 h-3" />
+                      Lleno — listo para asignar
+                    </p>
+                  )}
+                  {t.status === "almacen" && pct <= 35 && (
+                    <p className="text-[11px] text-amber-700 font-medium mt-1 flex items-center gap-1">
+                      <Truck className="w-3 h-3" />
+                      Por enviar a proveedor
                     </p>
                   )}
                 </div>
