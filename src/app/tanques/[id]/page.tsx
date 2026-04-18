@@ -25,6 +25,7 @@ type Tank = {
   initial_weight_kg: number;
   status: "almacen" | "asignado" | "en_proveedor" | "baja";
   current_poi_id: string | null;
+  current_pozo_id: string | null;
   decommission_certificate_url: string | null;
   decommissioned_at: string | null;
   notes: string | null;
@@ -32,17 +33,20 @@ type Tank = {
 };
 
 type POI = { id: string; name: string };
+type Pozo = { id: string; identifier: string };
 
 type TankEvent = {
   id: string;
   event_type: string;
   poi_id: string | null;
+  pozo_id: string | null;
   weight_kg: number | null;
   document_url: string | null;
   related_tank_id: string | null;
   notes: string | null;
   created_at: string;
   poi?: { name: string } | null;
+  pozo?: { identifier: string } | null;
   related_tank?: { identifier: string } | null;
 };
 
@@ -59,7 +63,7 @@ const STATUS_LABELS: Record<Tank["status"], { label: string; color: string }> =
 
 const EVENT_LABELS: Record<string, string> = {
   compra: "Compra",
-  asignacion: "Asignación a planta",
+  asignacion: "Asignación",
   retiro: "Retiro a almacén",
   cambio_entrada: "Cambio (entrada)",
   cambio_salida: "Cambio (salida)",
@@ -78,7 +82,9 @@ export default function TanqueDetalle() {
 
   const [tank, setTank] = useState<Tank | null>(null);
   const [currentPoi, setCurrentPoi] = useState<POI | null>(null);
+  const [currentPozo, setCurrentPozo] = useState<Pozo | null>(null);
   const [pois, setPois] = useState<POI[]>([]);
+  const [pozos, setPozos] = useState<Pozo[]>([]);
   const [events, setEvents] = useState<TankEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -87,8 +93,9 @@ export default function TanqueDetalle() {
   const [actionError, setActionError] = useState("");
 
   // Asignar
-  const [selectedPoiId, setSelectedPoiId] = useState("");
-  const [poiCurrentTank, setPoiCurrentTank] = useState<{
+  const [destType, setDestType] = useState<"poi" | "pozo">("poi");
+  const [selectedDestId, setSelectedDestId] = useState("");
+  const [destCurrentTank, setDestCurrentTank] = useState<{
     id: string;
     identifier: string;
   } | null>(null);
@@ -104,19 +111,20 @@ export default function TanqueDetalle() {
   }, [id]);
 
   useEffect(() => {
-    const checkPoi = async () => {
-      setPoiCurrentTank(null);
-      if (!selectedPoiId) return;
+    const checkDest = async () => {
+      setDestCurrentTank(null);
+      if (!selectedDestId) return;
+      const col = destType === "poi" ? "current_poi_id" : "current_pozo_id";
       const { data } = await supabase
         .from("tanks")
         .select("id, identifier")
-        .eq("current_poi_id", selectedPoiId)
+        .eq(col, selectedDestId)
         .eq("status", "asignado")
         .maybeSingle();
-      if (data) setPoiCurrentTank(data);
+      if (data) setDestCurrentTank(data);
     };
-    checkPoi();
-  }, [selectedPoiId]);
+    checkDest();
+  }, [selectedDestId, destType]);
 
   const load = async () => {
     setLoading(true);
@@ -142,16 +150,33 @@ export default function TanqueDetalle() {
       setCurrentPoi(null);
     }
 
+    if (t.current_pozo_id) {
+      const { data: pz } = await supabase
+        .from("pozos")
+        .select("id, identifier")
+        .eq("id", t.current_pozo_id)
+        .single();
+      setCurrentPozo(pz as Pozo);
+    } else {
+      setCurrentPozo(null);
+    }
+
     const { data: poiList } = await supabase
       .from("poi")
       .select("id, name")
       .order("name");
     setPois((poiList as POI[]) || []);
 
+    const { data: pozoList } = await supabase
+      .from("pozos")
+      .select("id, identifier")
+      .order("identifier");
+    setPozos((pozoList as Pozo[]) || []);
+
     const { data: ev } = await supabase
       .from("tank_events")
       .select(
-        "*, poi:poi_id(name), related_tank:related_tank_id(identifier)"
+        "*, poi:poi_id(name), pozo:pozo_id(identifier), related_tank:related_tank_id(identifier)"
       )
       .eq("tank_id", id)
       .order("created_at", { ascending: false });
@@ -163,8 +188,9 @@ export default function TanqueDetalle() {
   const resetActionState = () => {
     setMode(null);
     setActionError("");
-    setSelectedPoiId("");
-    setPoiCurrentTank(null);
+    setSelectedDestId("");
+    setDestType("poi");
+    setDestCurrentTank(null);
     setCertFile(null);
     setCertPreview("");
     setBajaNotes("");
@@ -193,42 +219,49 @@ export default function TanqueDetalle() {
   // ---------- Acciones ----------
   const handleAsignar = async () => {
     if (!tank || saving) return;
-    if (!selectedPoiId) {
-      setActionError("Selecciona una planta.");
+    if (!selectedDestId) {
+      setActionError(
+        destType === "poi" ? "Selecciona una planta." : "Selecciona un pozo."
+      );
       return;
     }
     setSaving(true);
     setActionError("");
 
-    const isSwap = !!poiCurrentTank;
+    const isSwap = !!destCurrentTank;
+    const destFkCol =
+      destType === "poi" ? "current_poi_id" : "current_pozo_id";
+    const eventDestField = destType === "poi" ? "poi_id" : "pozo_id";
 
-    if (isSwap && poiCurrentTank) {
-      // Outgoing tank -> almacen
+    if (isSwap && destCurrentTank) {
       await supabase
         .from("tanks")
-        .update({ status: "almacen", current_poi_id: null })
-        .eq("id", poiCurrentTank.id);
+        .update({ status: "almacen", current_poi_id: null, current_pozo_id: null })
+        .eq("id", destCurrentTank.id);
       await supabase.from("tank_events").insert([
         {
-          tank_id: poiCurrentTank.id,
+          tank_id: destCurrentTank.id,
           event_type: "cambio_salida",
-          poi_id: selectedPoiId,
+          [eventDestField]: selectedDestId,
           related_tank_id: tank.id,
         },
       ]);
     }
 
-    // Incoming tank -> asignado
     await supabase
       .from("tanks")
-      .update({ status: "asignado", current_poi_id: selectedPoiId })
+      .update({
+        status: "asignado",
+        current_poi_id: destType === "poi" ? selectedDestId : null,
+        current_pozo_id: destType === "pozo" ? selectedDestId : null,
+      })
       .eq("id", tank.id);
     await supabase.from("tank_events").insert([
       {
         tank_id: tank.id,
         event_type: isSwap ? "cambio_entrada" : "asignacion",
-        poi_id: selectedPoiId,
-        related_tank_id: isSwap && poiCurrentTank ? poiCurrentTank.id : null,
+        [eventDestField]: selectedDestId,
+        related_tank_id: isSwap && destCurrentTank ? destCurrentTank.id : null,
       },
     ]);
 
@@ -241,15 +274,17 @@ export default function TanqueDetalle() {
     if (!tank || saving) return;
     setSaving(true);
     const previousPoiId = tank.current_poi_id;
+    const previousPozoId = tank.current_pozo_id;
     await supabase
       .from("tanks")
-      .update({ status: "almacen", current_poi_id: null })
+      .update({ status: "almacen", current_poi_id: null, current_pozo_id: null })
       .eq("id", tank.id);
     await supabase.from("tank_events").insert([
       {
         tank_id: tank.id,
         event_type: "retiro",
         poi_id: previousPoiId,
+        pozo_id: previousPozoId,
       },
     ]);
     resetActionState();
@@ -276,6 +311,7 @@ export default function TanqueDetalle() {
       .update({
         status: "baja",
         current_poi_id: null,
+        current_pozo_id: null,
         decommission_certificate_url: url,
         decommissioned_at: new Date().toISOString(),
       })
@@ -313,8 +349,6 @@ export default function TanqueDetalle() {
       : 0;
   const lowFuel = pct <= 15 && tank.status === "asignado";
 
-  const availablePois = pois;
-
   return (
     <div className="w-full max-w-4xl mx-auto py-8">
       <Link
@@ -336,9 +370,13 @@ export default function TanqueDetalle() {
               <h1 className="text-3xl font-bold text-gray-800">
                 {tank.identifier}
               </h1>
-              {tank.status === "asignado" && currentPoi && (
+              {tank.status === "asignado" && (currentPoi || currentPozo) && (
                 <p className="text-gray-500 text-sm flex items-center gap-1 mt-1">
-                  <MapPin className="w-3 h-3" /> {currentPoi.name}
+                  <MapPin className="w-3 h-3" />
+                  <span className="text-gray-400">
+                    {currentPoi ? "Planta:" : "Pozo:"}
+                  </span>{" "}
+                  {currentPoi?.name || currentPozo?.identifier}
                 </p>
               )}
             </div>
@@ -411,7 +449,7 @@ export default function TanqueDetalle() {
                     : "bg-blue-50 text-dtm-blue hover:bg-blue-100"
                 }`}
               >
-                <MapPin className="w-4 h-4" /> Asignar a Planta
+                <MapPin className="w-4 h-4" /> Asignar a Planta o Pozo
               </button>
             )}
             {tank.status === "asignado" && (
@@ -458,26 +496,68 @@ export default function TanqueDetalle() {
           {mode === "asignar" && (
             <div className="border-t border-gray-100 pt-4 space-y-4">
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de destino
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDestType("poi");
+                      setSelectedDestId("");
+                    }}
+                    className={`px-3 py-2 rounded-lg border-2 text-sm font-semibold transition ${
+                      destType === "poi"
+                        ? "border-dtm-blue bg-blue-50 text-dtm-blue"
+                        : "border-gray-200 text-gray-500"
+                    }`}
+                  >
+                    Planta (POI)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDestType("pozo");
+                      setSelectedDestId("");
+                    }}
+                    className={`px-3 py-2 rounded-lg border-2 text-sm font-semibold transition ${
+                      destType === "pozo"
+                        ? "border-dtm-blue bg-blue-50 text-dtm-blue"
+                        : "border-gray-200 text-gray-500"
+                    }`}
+                  >
+                    Pozo
+                  </button>
+                </div>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Planta destino
+                  {destType === "poi" ? "Planta destino" : "Pozo destino"}
                 </label>
                 <select
-                  value={selectedPoiId}
-                  onChange={(e) => setSelectedPoiId(e.target.value)}
+                  value={selectedDestId}
+                  onChange={(e) => setSelectedDestId(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-dtm-blue"
                 >
-                  <option value="">Selecciona una planta...</option>
-                  {availablePois.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
+                  <option value="">
+                    Selecciona {destType === "poi" ? "una planta" : "un pozo"}
+                    ...
+                  </option>
+                  {(destType === "poi"
+                    ? pois.map((p) => ({ id: p.id, label: p.name }))
+                    : pozos.map((p) => ({ id: p.id, label: p.identifier }))
+                  ).map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
                     </option>
                   ))}
                 </select>
               </div>
-              {poiCurrentTank && (
+              {destCurrentTank && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-                  Esta planta ya tiene asignado el tanque{" "}
-                  <strong>{poiCurrentTank.identifier}</strong>. Al continuar se
+                  Este {destType === "poi" ? "planta" : "pozo"} ya tiene
+                  asignado el tanque{" "}
+                  <strong>{destCurrentTank.identifier}</strong>. Al continuar se
                   registrará un cambio: el tanque saliente regresará a almacén.
                 </div>
               )}
@@ -493,12 +573,12 @@ export default function TanqueDetalle() {
                 </button>
                 <button
                   onClick={handleAsignar}
-                  disabled={saving || !selectedPoiId}
+                  disabled={saving || !selectedDestId}
                   className="flex-1 px-4 py-2 bg-dtm-blue text-white rounded-lg font-semibold hover:bg-blue-800 disabled:opacity-50"
                 >
                   {saving
                     ? "Guardando..."
-                    : poiCurrentTank
+                    : destCurrentTank
                       ? "Confirmar Cambio"
                       : "Asignar"}
                 </button>
@@ -510,7 +590,10 @@ export default function TanqueDetalle() {
             <div className="border-t border-gray-100 pt-4 space-y-4">
               <p className="text-sm text-gray-600">
                 Se retirará el tanque <strong>{tank.identifier}</strong> de{" "}
-                <strong>{currentPoi?.name}</strong> y quedará en almacén.
+                <strong>
+                  {currentPoi?.name || currentPozo?.identifier}
+                </strong>{" "}
+                y quedará en almacén.
               </p>
               <div className="flex gap-2">
                 <button
@@ -667,6 +750,12 @@ export default function TanqueDetalle() {
                     <p>
                       <span className="text-gray-400">Planta:</span>{" "}
                       {e.poi.name}
+                    </p>
+                  )}
+                  {e.pozo?.identifier && (
+                    <p>
+                      <span className="text-gray-400">Pozo:</span>{" "}
+                      {e.pozo.identifier}
                     </p>
                   )}
                   {e.weight_kg !== null && (

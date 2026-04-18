@@ -14,18 +14,18 @@ export default function Home() {
     {
       id: "pozos",
       name: "Pozos",
-      icon: <Droplet className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
-      href: "#",
-      active: false,
-      description: "Próximamente"
+      icon: <Droplet className="w-8 h-8 md:w-12 md:h-12 mb-4 text-dtm-blue group-hover:scale-110 transition-transform duration-300" />,
+      href: "/pozos",
+      active: true,
+      description: "Registro y revisión diaria de pozos"
     },
     {
       id: "mantenimiento",
       name: "Eventos de Mantenimiento",
-      icon: <Wrench className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
-      href: "#",
-      active: false,
-      description: "Próximamente"
+      icon: <Wrench className="w-8 h-8 md:w-12 md:h-12 mb-4 text-amber-600 group-hover:scale-110 transition-transform duration-300" />,
+      href: "/mantenimiento",
+      active: true,
+      description: "Incidencias abiertas y resueltas"
     },
     {
       id: "cilindros",

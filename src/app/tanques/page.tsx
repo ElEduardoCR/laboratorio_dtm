@@ -19,7 +19,9 @@ type Tank = {
   initial_weight_kg: number;
   status: "almacen" | "asignado" | "en_proveedor" | "baja";
   current_poi_id: string | null;
+  current_pozo_id: string | null;
   poi?: { name: string } | null;
+  pozo?: { identifier: string } | null;
 };
 
 type Filter = "todos" | "almacen" | "asignado" | "en_proveedor" | "baja";
@@ -48,7 +50,9 @@ export default function TanquesList() {
     setLoading(true);
     const { data } = await supabase
       .from("tanks")
-      .select("*, poi:current_poi_id(name)")
+      .select(
+        "*, poi:current_poi_id(name), pozo:current_pozo_id(identifier)"
+      )
       .order("identifier", { ascending: true });
     setTanks((data as Tank[]) || []);
     setLoading(false);
@@ -176,11 +180,14 @@ export default function TanquesList() {
                   </span>
                 </div>
 
-                {t.status === "asignado" && t.poi && (
+                {t.status === "asignado" && (t.poi || t.pozo) && (
                   <p className="text-xs text-gray-500 mb-3">
-                    Asignado a:{" "}
+                    Asignado a{" "}
+                    <span className="text-gray-400">
+                      ({t.poi ? "Planta" : "Pozo"}):
+                    </span>{" "}
                     <span className="font-medium text-gray-700">
-                      {t.poi.name}
+                      {t.poi?.name || t.pozo?.identifier}
                     </span>
                   </p>
                 )}

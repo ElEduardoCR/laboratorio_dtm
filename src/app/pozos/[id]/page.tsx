@@ -1,0 +1,416 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { supabase } from "@/utils/supabase/client";
+import {
+  ArrowLeft,
+  Droplet,
+  MapPin,
+  Activity,
+  Cylinder,
+  Edit3,
+  AlertTriangle,
+  Wrench,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+
+type Pozo = {
+  id: string;
+  identifier: string;
+  is_operational: boolean;
+  chlorinator_system: string | null;
+  address: string | null;
+  sampling_point: string | null;
+  notes: string | null;
+  last_chlorine_residual: number | null;
+};
+
+type Review = {
+  id: string;
+  review_date: string;
+  chlorine_residual: number;
+  photo_url: string;
+  cylinder_weight: number | null;
+  observations: string | null;
+};
+
+type Tank = {
+  id: string;
+  identifier: string;
+  current_weight_kg: number;
+  initial_weight_kg: number;
+};
+
+type MEvent = {
+  id: string;
+  event_type: string;
+  description: string | null;
+  status: string;
+  created_at: string;
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  cloro_alto: "Cloro residual alto",
+  cloro_bajo: "Cloro residual bajo",
+  clorador_danado: "Sistema clorador dañado",
+  otro: "Otro",
+};
+
+export default function PozoDetalle() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params?.id as string;
+
+  const [pozo, setPozo] = useState<Pozo | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [tank, setTank] = useState<Tank | null>(null);
+  const [openEvents, setOpenEvents] = useState<MEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (id) load();
+  }, [id]);
+
+  const load = async () => {
+    setLoading(true);
+
+    const { data: p } = await supabase
+      .from("pozos")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (!p) {
+      router.push("/pozos");
+      return;
+    }
+    setPozo(p as Pozo);
+
+    const { data: rs } = await supabase
+      .from("well_daily_reviews")
+      .select("*")
+      .eq("pozo_id", id)
+      .order("review_date", { ascending: false })
+      .limit(20);
+    setReviews((rs as Review[]) || []);
+
+    const { data: t } = await supabase
+      .from("tanks")
+      .select("id, identifier, current_weight_kg, initial_weight_kg")
+      .eq("current_pozo_id", id)
+      .eq("status", "asignado")
+      .maybeSingle();
+    setTank(t as Tank | null);
+
+    const { data: events } = await supabase
+      .from("maintenance_events")
+      .select("id, event_type, description, status, created_at")
+      .eq("pozo_id", id)
+      .neq("status", "cerrado")
+      .order("created_at", { ascending: false });
+    setOpenEvents((events as MEvent[]) || []);
+
+    setLoading(false);
+  };
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr + "T12:00:00");
+    return d.toLocaleDateString("es-MX", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  if (loading || !pozo) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-dtm-blue"></div>
+      </div>
+    );
+  }
+
+  const tankPct =
+    tank && tank.initial_weight_kg > 0
+      ? Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round((tank.current_weight_kg / tank.initial_weight_kg) * 100)
+          )
+        )
+      : 0;
+
+  return (
+    <div className="w-full max-w-4xl mx-auto py-8">
+      <Link
+        href="/pozos"
+        className="inline-flex items-center text-dtm-blue hover:underline mb-6 font-medium"
+      >
+        <ArrowLeft className="w-4 h-4 mr-1" />
+        Regresar a Pozos
+      </Link>
+
+      {/* Cabecera */}
+      <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-100 mb-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-3">
+              <Droplet className="w-7 h-7 text-dtm-blue" />
+              <h1 className="text-3xl font-bold text-gray-800">
+                {pozo.identifier}
+              </h1>
+            </div>
+            {pozo.address && (
+              <p className="text-gray-500 mt-2 flex items-start gap-1 text-sm">
+                <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
+                {pozo.address}
+              </p>
+            )}
+            {pozo.sampling_point && (
+              <p className="text-gray-500 mt-1 text-sm">
+                <span className="font-medium text-gray-600">
+                  Muestreo:
+                </span>{" "}
+                {pozo.sampling_point}
+              </p>
+            )}
+            {pozo.chlorinator_system && (
+              <p className="text-gray-500 mt-1 text-sm">
+                <span className="font-medium text-gray-600">Clorador:</span>{" "}
+                {pozo.chlorinator_system}
+              </p>
+            )}
+          </div>
+          <div
+            className={`px-4 py-2 rounded-full text-sm font-bold uppercase tracking-wider ${
+              pozo.is_operational
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-700"
+            }`}
+          >
+            {pozo.is_operational
+              ? "Estado: Operacional"
+              : "Estado: Fuera de Servicio"}
+          </div>
+        </div>
+      </div>
+
+      {/* Mantenimiento abierto */}
+      {openEvents.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
+            <h2 className="font-bold text-amber-800">
+              Eventos de Mantenimiento Abiertos ({openEvents.length})
+            </h2>
+          </div>
+          <div className="space-y-2">
+            {openEvents.map((ev) => (
+              <Link
+                key={ev.id}
+                href="/mantenimiento"
+                className="block bg-white rounded-lg p-3 border border-amber-200 hover:border-amber-400 transition"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-semibold text-amber-900 text-sm">
+                      {EVENT_LABELS[ev.event_type] || ev.event_type}
+                    </p>
+                    {ev.description && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        {ev.description}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                    {ev.status}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Métricas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-700">Cloro Residual</h3>
+            <Activity className="w-5 h-5 text-teal-500" />
+          </div>
+          <p className="text-4xl font-bold text-gray-800">
+            {pozo.last_chlorine_residual !== null
+              ? pozo.last_chlorine_residual
+              : "--"}{" "}
+            <span className="text-lg font-normal text-gray-500">mg/L</span>
+          </p>
+          <p className="text-xs text-gray-400 mt-2">
+            Última lectura registrada
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-700">Tanque Asignado</h3>
+            <Cylinder className="w-5 h-5 text-dtm-blue" />
+          </div>
+          {tank ? (
+            <Link
+              href={`/tanques/${tank.id}`}
+              className="block hover:opacity-80"
+            >
+              <p className="text-2xl font-bold text-gray-800 mb-2">
+                {tank.identifier}
+              </p>
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span>{tank.current_weight_kg} KG</span>
+                <span>de {tank.initial_weight_kg} KG</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                <div
+                  className={`h-2 ${
+                    tankPct <= 15
+                      ? "bg-red-500"
+                      : tankPct <= 35
+                        ? "bg-amber-500"
+                        : "bg-green-500"
+                  }`}
+                  style={{ width: `${tankPct}%` }}
+                ></div>
+              </div>
+            </Link>
+          ) : (
+            <div>
+              <p className="text-gray-400 text-sm mb-2">Sin tanque asignado.</p>
+              <Link
+                href="/tanques"
+                className="text-xs text-dtm-blue hover:underline"
+              >
+                Asignar uno desde Tanques →
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Acciones */}
+      <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200 mb-8">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">Acciones</h3>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <Link
+            href={`/pozos/${id}/revision-diaria`}
+            className="flex-1 flex justify-center items-center gap-2 bg-dtm-blue text-white py-3 px-4 rounded-xl hover:bg-blue-800 font-semibold shadow-sm transition-all"
+          >
+            <Edit3 className="w-5 h-5" />
+            Revisión Diaria
+          </Link>
+          <Link
+            href="/mantenimiento"
+            className="flex-1 flex justify-center items-center gap-2 bg-white text-amber-700 border-2 border-amber-300 py-3 px-4 rounded-xl hover:bg-amber-50 font-semibold transition-all"
+          >
+            <Wrench className="w-5 h-5" />
+            Ver Mantenimiento
+          </Link>
+        </div>
+      </div>
+
+      {/* Historial */}
+      <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-100">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">
+          Historial de Revisiones
+        </h3>
+        {reviews.length === 0 ? (
+          <p className="text-center text-gray-400 py-8">
+            No hay revisiones registradas.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {reviews.map((r) => {
+              const isExpanded = expanded === r.id;
+              return (
+                <div
+                  key={r.id}
+                  className="border border-gray-100 rounded-xl overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(isExpanded ? null : r.id)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-800">
+                        {formatDate(r.review_date)}
+                      </p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-500">
+                        <span>Cloro: {r.chlorine_residual} mg/L</span>
+                        {r.cylinder_weight !== null && (
+                          <span>Tanque: {r.cylinder_weight} KG</span>
+                        )}
+                      </div>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                    )}
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 border-t border-gray-100 pt-3">
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="bg-teal-50 rounded-lg p-3 text-center">
+                          <p className="text-[10px] text-teal-600 font-medium uppercase">
+                            Cloro Residual
+                          </p>
+                          <p className="text-lg font-bold text-teal-800">
+                            {r.chlorine_residual}{" "}
+                            <span className="text-xs font-normal">mg/L</span>
+                          </p>
+                        </div>
+                        {r.cylinder_weight !== null && (
+                          <div className="bg-blue-50 rounded-lg p-3 text-center">
+                            <p className="text-[10px] text-blue-600 font-medium uppercase">
+                              Peso Tanque
+                            </p>
+                            <p className="text-lg font-bold text-blue-800">
+                              {r.cylinder_weight}{" "}
+                              <span className="text-xs font-normal">KG</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      {r.observations && (
+                        <p className="text-sm text-gray-600 mb-3 bg-gray-50 p-3 rounded-lg">
+                          <span className="font-medium">Observaciones:</span>{" "}
+                          {r.observations}
+                        </p>
+                      )}
+                      {r.photo_url && (
+                        <a
+                          href={r.photo_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <img
+                            src={r.photo_url}
+                            alt="Evidencia"
+                            className="w-full max-w-xs h-40 object-cover rounded-lg border border-gray-200 hover:opacity-80 transition"
+                          />
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
