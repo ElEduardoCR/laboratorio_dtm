@@ -42,6 +42,32 @@ type Review = {
   created_at: string;
 };
 
+type WeeklyReview = {
+  id: string;
+  review_date: string;
+  is_operational: boolean;
+  salt_supplied_kg: number | null;
+  salt_emptied_kg: number | null;
+  collection_amount: number | null;
+  multimedia_filter_status: string | null;
+  carbon_filter_status: string | null;
+  resin_filter_status: string | null;
+  bigblue_filter_status: string | null;
+  observations: string | null;
+  coin_clean_photo: string | null;
+  coin_collection_photo: string | null;
+  salt_photo: string | null;
+  tank_input_video: string | null;
+  tank_output_video: string | null;
+  multimedia_filter_photo: string | null;
+  carbon_filter_photo: string | null;
+  resin_filter_photo: string | null;
+  sediment_filter_photo: string | null;
+  ro_system_photo: string | null;
+  bigblue_filter_photo: string | null;
+  uv_lamp_photo: string | null;
+};
+
 type FilterType = "diarias" | "semanales" | "mensuales";
 
 export default function POIDetail() {
@@ -59,6 +85,7 @@ export default function POIDetail() {
   const [filter, setFilter] = useState<FilterType>("diarias");
   const [expandedReview, setExpandedReview] = useState<string | null>(null);
   const [loadingReviews, setLoadingReviews] = useState(false);
+  const [weeklyReviews, setWeeklyReviews] = useState<WeeklyReview[]>([]);
   const [usages, setUsages] = useState<Usage[]>([]);
 
   useEffect(() => {
@@ -104,10 +131,20 @@ export default function POIDetail() {
   const fetchReviews = async () => {
     setLoadingReviews(true);
 
-    // For all filters, fetch enough reviews to group
-    let limit = 10;
-    if (filter === "semanales") limit = 70; // ~10 weeks * 7 days
-    if (filter === "mensuales") limit = 310; // ~10 months * 31 days
+    if (filter === "semanales") {
+      const { data } = await supabase
+        .from("weekly_reviews")
+        .select("*")
+        .eq("poi_id", id)
+        .order("review_date", { ascending: false })
+        .limit(20);
+      setWeeklyReviews((data as WeeklyReview[]) || []);
+      setReviews([]);
+      setLoadingReviews(false);
+      return;
+    }
+
+    const limit = filter === "mensuales" ? 310 : 10;
 
     const { data, error } = await supabase
       .from("daily_reviews")
@@ -127,12 +164,11 @@ export default function POIDetail() {
 
     if (filter === "diarias") {
       setReviews(allReviews.slice(0, 10));
-    } else if (filter === "semanales") {
-      setReviews(getOnePerWeek(allReviews, 10));
     } else {
       setReviews(getOnePerMonth(allReviews, 10));
     }
 
+    setWeeklyReviews([]);
     setLoadingReviews(false);
   };
 
@@ -458,6 +494,25 @@ export default function POIDetail() {
           <div className="flex justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-dtm-blue"></div>
           </div>
+        ) : filter === "semanales" ? (
+          weeklyReviews.length === 0 ? (
+            <p className="text-center text-gray-400 py-8">
+              No hay revisiones semanales registradas.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {weeklyReviews.map((w) => (
+                <WeeklyReviewRow
+                  key={w.id}
+                  review={w}
+                  expanded={expandedReview === w.id}
+                  onToggle={() =>
+                    setExpandedReview(expandedReview === w.id ? null : w.id)
+                  }
+                />
+              ))}
+            </div>
+          )
         ) : reviews.length === 0 ? (
           <p className="text-center text-gray-400 py-8">
             No hay revisiones registradas.
@@ -609,6 +664,166 @@ export default function POIDetail() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  green: "bg-green-100 text-green-700",
+  yellow: "bg-yellow-100 text-yellow-700",
+  red: "bg-red-100 text-red-700",
+};
+const STATUS_LABELS: Record<string, string> = {
+  green: "Buen estado",
+  yellow: "Próximo a cambio",
+  red: "Requiere mantenimiento",
+};
+
+function WeeklyReviewRow({
+  review,
+  expanded,
+  onToggle,
+}: {
+  review: WeeklyReview;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const media: { url: string | null; label: string; isVideo?: boolean }[] = [
+    { url: review.coin_clean_photo, label: "Monedero limpio" },
+    { url: review.coin_collection_photo, label: "Recaudación" },
+    { url: review.salt_photo, label: "Sal" },
+    { url: review.tank_input_video, label: "Entrada tanque", isVideo: true },
+    { url: review.tank_output_video, label: "Salida tanque", isVideo: true },
+    { url: review.multimedia_filter_photo, label: "Multimedia" },
+    { url: review.carbon_filter_photo, label: "Carbón" },
+    { url: review.resin_filter_photo, label: "Resinas" },
+    { url: review.sediment_filter_photo, label: "Sedimentos" },
+    { url: review.ro_system_photo, label: "Ósmosis" },
+    { url: review.bigblue_filter_photo, label: "BigBlue" },
+    { url: review.uv_lamp_photo, label: "Lámpara UV" },
+  ];
+  const filters = [
+    { label: "Multimedia", value: review.multimedia_filter_status },
+    { label: "Carbón", value: review.carbon_filter_status },
+    { label: "Resinas", value: review.resin_filter_status },
+    { label: "BigBlue", value: review.bigblue_filter_status },
+  ];
+  return (
+    <div className="border border-gray-100 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+      >
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-gray-800">
+            {new Date(review.review_date + "T12:00:00").toLocaleDateString(
+              "es-MX",
+              {
+                timeZone: "America/Mexico_City",
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              }
+            )}
+            {!review.is_operational && (
+              <span className="ml-2 text-[10px] font-bold uppercase bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                Fuera de servicio
+              </span>
+            )}
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-500">
+            {review.collection_amount !== null && (
+              <span>
+                Recaudación: $
+                {Number(review.collection_amount).toLocaleString("es-MX", {
+                  minimumFractionDigits: 2,
+                })}
+              </span>
+            )}
+            {review.salt_supplied_kg !== null && (
+              <span>
+                Sal: {review.salt_supplied_kg}/{review.salt_emptied_kg} kg
+              </span>
+            )}
+          </div>
+        </div>
+        {expanded ? (
+          <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+        )}
+      </button>
+      {expanded && (
+        <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-4">
+          {review.is_operational && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {filters.map(
+                  (f) =>
+                    f.value && (
+                      <div
+                        key={f.label}
+                        className={`rounded-lg px-3 py-2 text-center ${STATUS_COLORS[f.value] || "bg-gray-50 text-gray-600"}`}
+                      >
+                        <p className="text-[10px] uppercase font-semibold">
+                          {f.label}
+                        </p>
+                        <p className="text-xs font-semibold">
+                          {STATUS_LABELS[f.value] || f.value}
+                        </p>
+                      </div>
+                    )
+                )}
+              </div>
+              {media.some((m) => m.url) && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase mb-2">
+                    Evidencia
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {media.map(
+                      (m) =>
+                        m.url && (
+                          <a
+                            key={m.label}
+                            href={m.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block"
+                          >
+                            {m.isVideo ? (
+                              <video
+                                src={m.url}
+                                className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                              />
+                            ) : (
+                              <img
+                                src={m.url}
+                                alt={m.label}
+                                className="w-full h-24 object-cover rounded-lg border border-gray-200 hover:opacity-80 transition"
+                              />
+                            )}
+                            <p className="text-[10px] text-gray-500 mt-1 truncate">
+                              {m.label}
+                            </p>
+                          </a>
+                        )
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          {review.observations && (
+            <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+              <span className="font-medium">Observaciones:</span>{" "}
+              {review.observations}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -21,6 +21,23 @@ function getTodayMexicoCity(): string {
   });
 }
 
+// Returns the Monday (inclusive) of the current CDMX week as YYYY-MM-DD.
+function getWeekStartMexicoCity(): string {
+  const today = getTodayMexicoCity(); // YYYY-MM-DD CDMX
+  const d = new Date(today + "T12:00:00");
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diff = (day + 6) % 7; // days since Monday
+  d.setDate(d.getDate() - diff);
+  return d.toISOString().slice(0, 10);
+}
+
+// Returns next Monday (exclusive of current week) as YYYY-MM-DD for display.
+function getNextWeekStartMexicoCity(): string {
+  const monday = new Date(getWeekStartMexicoCity() + "T12:00:00");
+  monday.setDate(monday.getDate() + 7);
+  return monday.toISOString().slice(0, 10);
+}
+
 type MediaKey =
   | "coin_clean_photo"
   | "coin_collection_photo"
@@ -53,6 +70,10 @@ export default function RevisionSemanal() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [alreadyThisWeek, setAlreadyThisWeek] = useState<{
+    lastDate: string;
+    nextUnlock: string;
+  } | null>(null);
   const [outOfService, setOutOfService] = useState(false);
 
   // Inicial: null = no decidido, true = operacional, false = fuera de servicio
@@ -129,6 +150,23 @@ export default function RevisionSemanal() {
       setPoiName(poi.name);
       if (poi.is_operational === false) setOutOfService(true);
     }
+
+    // Verificar si ya hay revisión semanal en la semana actual (CDMX, lunes-domingo)
+    const weekStart = getWeekStartMexicoCity();
+    const { data: existing } = await supabase
+      .from("weekly_reviews")
+      .select("review_date")
+      .eq("poi_id", poiId)
+      .gte("review_date", weekStart)
+      .order("review_date", { ascending: false })
+      .limit(1);
+    if (existing && existing.length > 0) {
+      setAlreadyThisWeek({
+        lastDate: existing[0].review_date,
+        nextUnlock: getNextWeekStartMexicoCity(),
+      });
+    }
+
     setLoading(false);
   };
 
@@ -324,7 +362,46 @@ export default function RevisionSemanal() {
           })}
         </p>
 
-        {submitted ? (
+        {alreadyThisWeek && !submitted ? (
+          <div className="text-center py-10">
+            <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">
+              Revisión semanal ya registrada
+            </h2>
+            <p className="text-gray-500 max-w-md mx-auto">
+              Esta planta ya tiene una revisión semanal registrada el{" "}
+              <span className="font-semibold text-gray-700">
+                {new Date(
+                  alreadyThisWeek.lastDate + "T12:00:00"
+                ).toLocaleDateString("es-MX", {
+                  timeZone: "America/Mexico_City",
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })}
+              </span>
+              . El siguiente registro estará disponible el{" "}
+              <span className="font-semibold text-gray-700">
+                {new Date(
+                  alreadyThisWeek.nextUnlock + "T12:00:00"
+                ).toLocaleDateString("es-MX", {
+                  timeZone: "America/Mexico_City",
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })}{" "}
+                a las 00:01 hrs
+              </span>{" "}
+              (hora CDMX).
+            </p>
+            <Link
+              href={`/poi/${poiId}`}
+              className="inline-block mt-6 bg-dtm-blue text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-800 transition-colors"
+            >
+              Volver a la Planta
+            </Link>
+          </div>
+        ) : submitted ? (
           <div className="text-center py-10">
             <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-800 mb-2">
