@@ -15,6 +15,7 @@ import {
   Wrench,
   ChevronDown,
   ChevronUp,
+  DollarSign,
 } from "lucide-react";
 
 type Pozo = {
@@ -52,6 +53,16 @@ type MEvent = {
   created_at: string;
 };
 
+type Usage = {
+  id: string;
+  qty: number;
+  total_cost: number;
+  description: string | null;
+  created_at: string;
+  maintenance_event_id: string | null;
+  item?: { sku: string; description: string; unit: string } | null;
+};
+
 const EVENT_LABELS: Record<string, string> = {
   cloro_alto: "Cloro residual alto",
   cloro_bajo: "Cloro residual bajo",
@@ -68,6 +79,7 @@ export default function PozoDetalle() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [tank, setTank] = useState<Tank | null>(null);
   const [openEvents, setOpenEvents] = useState<MEvent[]>([]);
+  const [usages, setUsages] = useState<Usage[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -112,6 +124,15 @@ export default function PozoDetalle() {
       .neq("status", "cerrado")
       .order("created_at", { ascending: false });
     setOpenEvents((events as MEvent[]) || []);
+
+    const { data: us } = await supabase
+      .from("inventory_usages")
+      .select(
+        "id, qty, total_cost, description, created_at, maintenance_event_id, item:item_id(sku, description, unit)"
+      )
+      .eq("pozo_id", id)
+      .order("created_at", { ascending: false });
+    setUsages((us as unknown as Usage[]) || []);
 
     setLoading(false);
   };
@@ -318,6 +339,68 @@ export default function PozoDetalle() {
             Ver Mantenimiento
           </Link>
         </div>
+      </div>
+
+      {/* Cuenta de gasto */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-green-600" />
+            Cuenta de Gasto
+          </h3>
+          <span className="text-sm text-gray-600">
+            Total:{" "}
+            <span className="font-bold text-gray-800">
+              $
+              {usages
+                .reduce((a, u) => a + Number(u.total_cost), 0)
+                .toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+            </span>
+          </span>
+        </div>
+        {usages.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">
+            Sin material asignado a este pozo.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {usages.map((u) => (
+              <div
+                key={u.id}
+                className="border-t border-gray-100 pt-2 text-sm flex items-start justify-between gap-3"
+              >
+                <div>
+                  <p className="font-semibold text-gray-800">
+                    {u.item?.sku} · {u.qty} {u.item?.unit}
+                    <span className="font-normal text-gray-500 ml-2">
+                      ${Number(u.total_cost).toFixed(2)}
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {u.item?.description}
+                    {" · "}
+                    {new Date(u.created_at).toLocaleDateString("es-MX", {
+                      timeZone: "America/Mexico_City",
+                    })}
+                  </p>
+                  {u.description && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      {u.description}
+                    </p>
+                  )}
+                </div>
+                {u.maintenance_event_id && (
+                  <Link
+                    href={`/mantenimiento/${u.maintenance_event_id}`}
+                    className="text-xs text-dtm-blue hover:underline shrink-0"
+                  >
+                    Evento →
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Historial */}

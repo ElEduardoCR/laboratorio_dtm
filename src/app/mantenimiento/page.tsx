@@ -201,9 +201,12 @@ export default function MantenimientoList() {
                         )}
                       </span>
                     </div>
-                    <h3 className="font-semibold text-gray-800">
+                    <Link
+                      href={`/mantenimiento/${e.id}`}
+                      className="font-semibold text-gray-800 hover:text-dtm-blue hover:underline block"
+                    >
                       {EVENT_LABELS[e.event_type] || e.event_type}
-                    </h3>
+                    </Link>
                     {e.description && (
                       <p className="text-sm text-gray-600 mt-1">
                         {e.description}

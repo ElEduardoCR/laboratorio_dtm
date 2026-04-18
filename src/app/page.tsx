@@ -38,10 +38,10 @@ export default function Home() {
     {
       id: "inventario",
       name: "Inventario",
-      icon: <Box className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
-      href: "#",
-      active: false,
-      description: "Próximamente"
+      icon: <Box className="w-8 h-8 md:w-12 md:h-12 mb-4 text-dtm-blue group-hover:scale-110 transition-transform duration-300" />,
+      href: "/inventario",
+      active: true,
+      description: "SKUs, entradas y uso de material"
     },
     {
       id: "recaudacion",
