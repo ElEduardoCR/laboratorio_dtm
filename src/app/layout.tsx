@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import "./globals.css";
 import { POLYFILL_SCRIPT } from "./polyfills";
+import { AuthProvider } from "@/context/AuthContext";
+import { AuthGate } from "@/components/AuthGate";
+import { Header } from "@/components/Header";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,13 +36,15 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: POLYFILL_SCRIPT }} />
       </head>
       <body className="min-h-full flex flex-col bg-white">
-        <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 flex flex-col">
-          {children}
-        </main>
-
-        <footer className="bg-dtm-blue text-white w-full p-4 text-center mt-auto">
-          <p>&copy; {new Date().getFullYear()} Laboratorio DTM. Todos los derechos reservados.</p>
-        </footer>
+        <AuthProvider>
+          <Header />
+          <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 flex flex-col">
+            <AuthGate>{children}</AuthGate>
+          </main>
+          <footer className="bg-dtm-blue text-white w-full p-4 text-center mt-auto">
+            <p>&copy; {new Date().getFullYear()} Laboratorio DTM. Todos los derechos reservados.</p>
+          </footer>
+        </AuthProvider>
       </body>
     </html>
   );

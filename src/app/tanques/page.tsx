@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
+import { usePermission } from "@/context/AuthContext";
 import {
   ArrowLeft,
   Plus,
@@ -41,6 +42,9 @@ export default function TanquesList() {
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("todos");
+  const canSend = usePermission("tanks.out");
+  const canReceive = usePermission("tanks.in");
+  const canCreate = usePermission("create.tanques");
 
   useEffect(() => {
     load();
@@ -89,27 +93,33 @@ export default function TanquesList() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link
-            href="/tanques/enviar-proveedor"
-            className="inline-flex items-center gap-2 bg-white text-amber-700 border-2 border-amber-300 px-4 py-2 rounded-xl font-semibold hover:bg-amber-50 transition-colors"
-          >
-            <Truck className="w-4 h-4" />
-            Enviar a Proveedor
-          </Link>
-          <Link
-            href="/tanques/recibir-proveedor"
-            className="inline-flex items-center gap-2 bg-white text-green-700 border-2 border-green-300 px-4 py-2 rounded-xl font-semibold hover:bg-green-50 transition-colors"
-          >
-            <PackageCheck className="w-4 h-4" />
-            Recibir de Proveedor
-          </Link>
-          <Link
-            href="/tanques/nuevo"
-            className="inline-flex items-center gap-2 bg-dtm-blue text-white px-4 py-2 rounded-xl font-semibold hover:bg-blue-800 transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo Tanque
-          </Link>
+          {canSend && (
+            <Link
+              href="/tanques/enviar-proveedor"
+              className="inline-flex items-center gap-2 bg-white text-amber-700 border-2 border-amber-300 px-4 py-2 rounded-xl font-semibold hover:bg-amber-50 transition-colors"
+            >
+              <Truck className="w-4 h-4" />
+              Enviar a Proveedor
+            </Link>
+          )}
+          {canReceive && (
+            <Link
+              href="/tanques/recibir-proveedor"
+              className="inline-flex items-center gap-2 bg-white text-green-700 border-2 border-green-300 px-4 py-2 rounded-xl font-semibold hover:bg-green-50 transition-colors"
+            >
+              <PackageCheck className="w-4 h-4" />
+              Recibir de Proveedor
+            </Link>
+          )}
+          {canCreate && (
+            <Link
+              href="/tanques/nuevo"
+              className="inline-flex items-center gap-2 bg-dtm-blue text-white px-4 py-2 rounded-xl font-semibold hover:bg-blue-800 transition-colors shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo Tanque
+            </Link>
+          )}
         </div>
       </div>
 

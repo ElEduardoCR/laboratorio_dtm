@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { MediaThumb } from "@/components/MediaThumb";
+import { usePermission } from "@/context/AuthContext";
 
 type Usage = {
   id: string;
@@ -88,6 +89,8 @@ export default function POIDetail() {
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [weeklyReviews, setWeeklyReviews] = useState<WeeklyReview[]>([]);
   const [usages, setUsages] = useState<Usage[]>([]);
+  const canDaily = usePermission("reviews.daily");
+  const canWeekly = usePermission("reviews.weekly");
 
   useEffect(() => {
     if (!id) return;
@@ -380,27 +383,33 @@ export default function POIDetail() {
       </div>
 
       {/* Acciones */}
-      <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200 mb-8">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">
-          Opciones de Mantenimiento
-        </h3>
-        <div className="flex flex-col sm:flex-row gap-4">
-          <Link
-            href={`/poi/${id}/revision-diaria`}
-            className="flex-1 flex justify-center items-center gap-2 bg-dtm-blue text-white py-3 px-4 rounded-xl hover:bg-blue-800 font-semibold shadow-sm transition-all"
-          >
-            <Edit3 className="w-5 h-5" />
-            Revisión Diaria
-          </Link>
-          <Link
-            href={`/poi/${id}/revision-semanal`}
-            className="flex-1 flex justify-center items-center gap-2 bg-white text-dtm-blue border-2 border-dtm-blue py-3 px-4 rounded-xl hover:bg-blue-50 font-semibold shadow-sm transition-all"
-          >
-            <Settings className="w-5 h-5" />
-            Revisión Semanal
-          </Link>
+      {(canDaily || canWeekly) && (
+        <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200 mb-8">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">
+            Opciones de Mantenimiento
+          </h3>
+          <div className="flex flex-col sm:flex-row gap-4">
+            {canDaily && (
+              <Link
+                href={`/poi/${id}/revision-diaria`}
+                className="flex-1 flex justify-center items-center gap-2 bg-dtm-blue text-white py-3 px-4 rounded-xl hover:bg-blue-800 font-semibold shadow-sm transition-all"
+              >
+                <Edit3 className="w-5 h-5" />
+                Revisión Diaria
+              </Link>
+            )}
+            {canWeekly && (
+              <Link
+                href={`/poi/${id}/revision-semanal`}
+                className="flex-1 flex justify-center items-center gap-2 bg-white text-dtm-blue border-2 border-dtm-blue py-3 px-4 rounded-xl hover:bg-blue-50 font-semibold shadow-sm transition-all"
+              >
+                <Settings className="w-5 h-5" />
+                Revisión Semanal
+              </Link>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Cuenta de gasto */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">

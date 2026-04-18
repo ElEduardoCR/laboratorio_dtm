@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
+import { usePermission } from "@/context/AuthContext";
 import {
   ArrowLeft,
   Plus,
@@ -26,6 +27,8 @@ export default function InventarioList() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const canIn = usePermission("inventory.in");
+  const canCreate = usePermission("create.inventario");
 
   useEffect(() => {
     load();
@@ -71,20 +74,24 @@ export default function InventarioList() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link
-            href="/inventario/entrada"
-            className="inline-flex items-center gap-2 bg-white text-green-700 border-2 border-green-300 px-4 py-2 rounded-xl font-semibold hover:bg-green-50 transition-colors"
-          >
-            <PackagePlus className="w-4 h-4" />
-            Entrada de Material
-          </Link>
-          <Link
-            href="/inventario/nuevo"
-            className="inline-flex items-center gap-2 bg-dtm-blue text-white px-4 py-2 rounded-xl font-semibold hover:bg-blue-800 transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo SKU
-          </Link>
+          {canIn && (
+            <Link
+              href="/inventario/entrada"
+              className="inline-flex items-center gap-2 bg-white text-green-700 border-2 border-green-300 px-4 py-2 rounded-xl font-semibold hover:bg-green-50 transition-colors"
+            >
+              <PackagePlus className="w-4 h-4" />
+              Entrada de Material
+            </Link>
+          )}
+          {canCreate && (
+            <Link
+              href="/inventario/nuevo"
+              className="inline-flex items-center gap-2 bg-dtm-blue text-white px-4 py-2 rounded-xl font-semibold hover:bg-blue-800 transition-colors shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo SKU
+            </Link>
+          )}
         </div>
       </div>
 

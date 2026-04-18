@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
+import { usePermission } from "@/context/AuthContext";
 import {
   ArrowLeft,
   Wrench,
@@ -81,6 +82,7 @@ export default function MantenimientoDetalle() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  const canOut = usePermission("inventory.out");
   const [itemId, setItemId] = useState("");
   const [qty, setQty] = useState("");
   const [description, setDescription] = useState("");
@@ -327,7 +329,7 @@ export default function MantenimientoDetalle() {
           </span>
         </div>
 
-        {event.status !== "cerrado" && (
+        {event.status !== "cerrado" && canOut && (
           <form
             onSubmit={addUsage}
             className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-2 mb-4"
@@ -409,7 +411,7 @@ export default function MantenimientoDetalle() {
                     </p>
                   )}
                 </div>
-                {event.status !== "cerrado" && (
+                {event.status !== "cerrado" && canOut && (
                   <button
                     onClick={() => removeUsage(u)}
                     disabled={busy}

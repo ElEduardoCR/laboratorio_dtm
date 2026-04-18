@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
 import { MediaThumb } from "@/components/MediaThumb";
+import { usePermission } from "@/context/AuthContext";
 import {
   ArrowLeft,
   Droplet,
@@ -83,6 +84,7 @@ export default function PozoDetalle() {
   const [usages, setUsages] = useState<Usage[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const canDaily = usePermission("reviews.daily");
 
   useEffect(() => {
     if (id) load();
@@ -325,13 +327,15 @@ export default function PozoDetalle() {
       <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200 mb-8">
         <h3 className="text-lg font-bold text-gray-800 mb-4">Acciones</h3>
         <div className="flex flex-col sm:flex-row gap-4">
-          <Link
-            href={`/pozos/${id}/revision-diaria`}
-            className="flex-1 flex justify-center items-center gap-2 bg-dtm-blue text-white py-3 px-4 rounded-xl hover:bg-blue-800 font-semibold shadow-sm transition-all"
-          >
-            <Edit3 className="w-5 h-5" />
-            Revisión Diaria
-          </Link>
+          {canDaily && (
+            <Link
+              href={`/pozos/${id}/revision-diaria`}
+              className="flex-1 flex justify-center items-center gap-2 bg-dtm-blue text-white py-3 px-4 rounded-xl hover:bg-blue-800 font-semibold shadow-sm transition-all"
+            >
+              <Edit3 className="w-5 h-5" />
+              Revisión Diaria
+            </Link>
+          )}
           <Link
             href="/mantenimiento"
             className="flex-1 flex justify-center items-center gap-2 bg-white text-amber-700 border-2 border-amber-300 py-3 px-4 rounded-xl hover:bg-amber-50 font-semibold transition-all"

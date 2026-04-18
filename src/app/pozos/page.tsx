@@ -10,6 +10,7 @@ import {
   Activity,
 } from "lucide-react";
 import { supabase } from "@/utils/supabase/client";
+import { usePermission } from "@/context/AuthContext";
 
 type Pozo = {
   id: string;
@@ -22,6 +23,7 @@ type Pozo = {
 export default function PozosList() {
   const [pozos, setPozos] = useState<Pozo[]>([]);
   const [loading, setLoading] = useState(true);
+  const canCreate = usePermission("create.pozos");
 
   useEffect(() => {
     load();
@@ -54,13 +56,15 @@ export default function PozosList() {
             Gestión y monitoreo de cloración en pozos.
           </p>
         </div>
-        <Link
-          href="/pozos/nuevo"
-          className="inline-flex items-center gap-2 bg-dtm-blue text-white px-4 py-2 rounded-xl font-semibold hover:bg-blue-800 transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Nuevo Pozo
-        </Link>
+        {canCreate && (
+          <Link
+            href="/pozos/nuevo"
+            className="inline-flex items-center gap-2 bg-dtm-blue text-white px-4 py-2 rounded-xl font-semibold hover:bg-blue-800 transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo Pozo
+          </Link>
+        )}
       </div>
 
       {loading ? (
@@ -71,13 +75,15 @@ export default function PozosList() {
         <div className="bg-white rounded-2xl p-10 border border-gray-100 text-center">
           <Droplet className="w-12 h-12 mx-auto text-gray-300 mb-3" />
           <p className="text-gray-500">No hay pozos registrados.</p>
-          <Link
-            href="/pozos/nuevo"
-            className="inline-flex items-center gap-2 mt-4 text-dtm-blue hover:underline font-medium"
-          >
-            <Plus className="w-4 h-4" />
-            Registrar el primero
-          </Link>
+          {canCreate && (
+            <Link
+              href="/pozos/nuevo"
+              className="inline-flex items-center gap-2 mt-4 text-dtm-blue hover:underline font-medium"
+            >
+              <Plus className="w-4 h-4" />
+              Registrar el primero
+            </Link>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

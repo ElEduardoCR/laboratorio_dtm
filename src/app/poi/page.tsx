@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PlusCircle, MapPin, Activity, ArrowLeft } from "lucide-react";
 import { supabase } from "@/utils/supabase/client";
+import { usePermission } from "@/context/AuthContext";
 
 export default function POIList() {
   const [pois, setPois] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const canCreate = usePermission("create.poi");
 
   useEffect(() => {
     fetchPois();
@@ -46,13 +48,15 @@ export default function POIList() {
             Gestión de plantas, métricas y mantenimientos.
           </p>
         </div>
-        <Link
-          href="/poi/nueva"
-          className="flex items-center gap-2 bg-dtm-blue text-white px-5 py-3 rounded-lg hover:bg-blue-800 transition-colors shadow-md font-medium"
-        >
-          <PlusCircle className="w-5 h-5" />
-          Añadir Nueva Planta
-        </Link>
+        {canCreate && (
+          <Link
+            href="/poi/nueva"
+            className="flex items-center gap-2 bg-dtm-blue text-white px-5 py-3 rounded-lg hover:bg-blue-800 transition-colors shadow-md font-medium"
+          >
+            <PlusCircle className="w-5 h-5" />
+            Añadir Nueva Planta
+          </Link>
+        )}
       </div>
 
       {loading ? (
