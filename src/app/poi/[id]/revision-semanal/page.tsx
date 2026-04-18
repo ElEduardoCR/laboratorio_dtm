@@ -61,6 +61,7 @@ export default function RevisionSemanal() {
   const [form, setForm] = useState({
     salt_supplied_kg: "",
     salt_emptied_kg: "",
+    collection_amount: "",
     multimedia_filter_status: "" as Status,
     carbon_filter_status: "" as Status,
     resin_filter_status: "" as Status,
@@ -251,6 +252,9 @@ export default function RevisionSemanal() {
         is_operational: true,
         salt_supplied_kg: parseFloat(form.salt_supplied_kg),
         salt_emptied_kg: parseFloat(form.salt_emptied_kg),
+        collection_amount: form.collection_amount
+          ? parseFloat(form.collection_amount)
+          : null,
         multimedia_filter_status: form.multimedia_filter_status,
         carbon_filter_status: form.carbon_filter_status,
         resin_filter_status: form.resin_filter_status,
@@ -467,6 +471,36 @@ export default function RevisionSemanal() {
                     fileInputRefs.current.coin_collection_photo = el;
                   }}
                 />
+              </div>
+              <div className="mt-4">
+                <label
+                  htmlFor="collection_amount"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Monto recaudado (MXN)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                    $
+                  </span>
+                  <input
+                    id="collection_amount"
+                    name="collection_amount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    value={form.collection_amount}
+                    onChange={(e) =>
+                      setForm({ ...form, collection_amount: e.target.value })
+                    }
+                    placeholder="0.00"
+                    className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Dinero retirado del monedero esta semana.
+                </p>
               </div>
             </Section>
 

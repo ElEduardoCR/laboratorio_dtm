@@ -46,10 +46,10 @@ export default function Home() {
     {
       id: "recaudacion",
       name: "Recaudación",
-      icon: <DollarSign className="w-8 h-8 md:w-12 md:h-12 mb-4 text-gray-400" />,
-      href: "#",
-      active: false,
-      description: "Próximamente"
+      icon: <DollarSign className="w-8 h-8 md:w-12 md:h-12 mb-4 text-green-600 group-hover:scale-110 transition-transform duration-300" />,
+      href: "/recaudacion",
+      active: true,
+      description: "Ingresos semanales y mensuales por POI"
     }
   ];
 
