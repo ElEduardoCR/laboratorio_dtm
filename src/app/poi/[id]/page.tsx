@@ -15,6 +15,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import Link from "next/link";
+import { MediaThumb } from "@/components/MediaThumb";
 
 type Usage = {
   id: string;
@@ -635,22 +636,12 @@ export default function POIDetail() {
                             ].map(
                               (photo) =>
                                 photo.url && (
-                                  <a
+                                  <MediaThumb
                                     key={photo.label}
-                                    href={photo.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="block"
-                                  >
-                                    <img
-                                      src={photo.url}
-                                      alt={photo.label}
-                                      className="w-full h-24 object-cover rounded-lg border border-gray-200 hover:opacity-80 transition"
-                                    />
-                                    <p className="text-[10px] text-gray-500 text-center mt-1">
-                                      {photo.label}
-                                    </p>
-                                  </a>
+                                    url={photo.url}
+                                    label={photo.label}
+                                    kind="image"
+                                  />
                                 )
                             )}
                           </div>
@@ -786,29 +777,12 @@ function WeeklyReviewRow({
                     {media.map(
                       (m) =>
                         m.url && (
-                          <a
+                          <MediaThumb
                             key={m.label}
-                            href={m.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block"
-                          >
-                            {m.isVideo ? (
-                              <video
-                                src={m.url}
-                                className="w-full h-24 object-cover rounded-lg border border-gray-200"
-                              />
-                            ) : (
-                              <img
-                                src={m.url}
-                                alt={m.label}
-                                className="w-full h-24 object-cover rounded-lg border border-gray-200 hover:opacity-80 transition"
-                              />
-                            )}
-                            <p className="text-[10px] text-gray-500 mt-1 truncate">
-                              {m.label}
-                            </p>
-                          </a>
+                            url={m.url}
+                            label={m.label}
+                            kind={m.isVideo ? "video" : "image"}
+                          />
                         )
                     )}
                   </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
+import { MediaThumb } from "@/components/MediaThumb";
 import {
   ArrowLeft,
   Droplet,
@@ -474,17 +475,14 @@ export default function PozoDetalle() {
                         </p>
                       )}
                       {r.photo_url && (
-                        <a
-                          href={r.photo_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <img
-                            src={r.photo_url}
-                            alt="Evidencia"
+                        <div className="w-full max-w-xs">
+                          <MediaThumb
+                            url={r.photo_url}
+                            label="Evidencia cloro"
+                            kind="image"
                             className="w-full max-w-xs h-40 object-cover rounded-lg border border-gray-200 hover:opacity-80 transition"
                           />
-                        </a>
+                        </div>
                       )}
                     </div>
                   )}
