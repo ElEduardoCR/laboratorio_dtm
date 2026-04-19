@@ -23,13 +23,16 @@ import {
 type Pozo = {
   id: string;
   identifier: string;
+  well_number: string | null;
+  nickname: string | null;
+  kind: "urbano" | "rural" | null;
   is_operational: boolean;
   chlorinator_system: string | null;
-  address: string | null;
-  sampling_point: string | null;
   notes: string | null;
   last_chlorine_residual: number | null;
 };
+
+type SamplingPoint = { id: string; address: string; position: number };
 
 type Review = {
   id: string;
@@ -38,6 +41,8 @@ type Review = {
   photo_url: string;
   cylinder_weight: number | null;
   observations: string | null;
+  signed_by: string | null;
+  signer?: { full_name: string } | null;
 };
 
 type Tank = {
@@ -78,6 +83,7 @@ export default function PozoDetalle() {
   const id = params?.id as string;
 
   const [pozo, setPozo] = useState<Pozo | null>(null);
+  const [points, setPoints] = useState<SamplingPoint[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [tank, setTank] = useState<Tank | null>(null);
   const [openEvents, setOpenEvents] = useState<MEvent[]>([]);
@@ -104,13 +110,42 @@ export default function PozoDetalle() {
     }
     setPozo(p as Pozo);
 
+    const { data: sp } = await supabase
+      .from("pozo_sampling_points")
+      .select("id, address, position")
+      .eq("pozo_id", id)
+      .order("position");
+    setPoints((sp as SamplingPoint[]) || []);
+
     const { data: rs } = await supabase
       .from("well_daily_reviews")
       .select("*")
       .eq("pozo_id", id)
       .order("review_date", { ascending: false })
       .limit(20);
-    setReviews((rs as Review[]) || []);
+    const rRows = (rs as Review[]) || [];
+    const rIds = Array.from(
+      new Set(rRows.map((r) => r.signed_by).filter(Boolean))
+    ) as string[];
+    if (rIds.length) {
+      const { data: profs } = await supabase
+        .from("user_profiles")
+        .select("id, full_name")
+        .in("id", rIds);
+      const byId = new Map(
+        ((profs as { id: string; full_name: string }[]) || []).map((p) => [
+          p.id,
+          p,
+        ])
+      );
+      rRows.forEach((r) => {
+        if (r.signed_by) {
+          const p = byId.get(r.signed_by);
+          r.signer = p ? { full_name: p.full_name } : null;
+        }
+      });
+    }
+    setReviews(rRows);
 
     const { data: t } = await supabase
       .from("tanks")
@@ -189,19 +224,40 @@ export default function PozoDetalle() {
                 {pozo.identifier}
               </h1>
             </div>
-            {pozo.address && (
-              <p className="text-gray-500 mt-2 flex items-start gap-1 text-sm">
-                <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
-                {pozo.address}
-              </p>
-            )}
-            {pozo.sampling_point && (
-              <p className="text-gray-500 mt-1 text-sm">
-                <span className="font-medium text-gray-600">
-                  Muestreo:
-                </span>{" "}
-                {pozo.sampling_point}
-              </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {pozo.kind && (
+                <span
+                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                    pozo.kind === "rural"
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-sky-100 text-sky-700"
+                  }`}
+                >
+                  {pozo.kind === "rural"
+                    ? "🌾 Rural · hipoclorito"
+                    : "🏙️ Urbano · gas-cloro"}
+                </span>
+              )}
+              {pozo.well_number && (
+                <span className="text-xs text-gray-500">
+                  Pozo #{pozo.well_number}
+                </span>
+              )}
+            </div>
+            {points.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-600 uppercase mb-1">
+                  Ubicaciones de muestreo
+                </p>
+                <ul className="text-sm text-gray-600 space-y-1">
+                  {points.map((p) => (
+                    <li key={p.id} className="flex items-start gap-1">
+                      <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-gray-400" />
+                      {p.address}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {pozo.chlorinator_system && (
               <p className="text-gray-500 mt-1 text-sm">
@@ -435,6 +491,11 @@ export default function PozoDetalle() {
                       <p className="text-sm font-semibold text-gray-800">
                         {formatDate(r.review_date)}
                       </p>
+                      {r.signer?.full_name && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Firmado por: {r.signer.full_name}
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-500">
                         <span>Cloro: {r.chlorine_residual} mg/L</span>
                         {r.cylinder_weight !== null && (

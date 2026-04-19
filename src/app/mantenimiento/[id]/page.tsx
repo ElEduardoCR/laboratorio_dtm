@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
-import { usePermission } from "@/context/AuthContext";
+import { useAuth, usePermission } from "@/context/AuthContext";
 import {
   ArrowLeft,
   Wrench,
@@ -16,6 +16,8 @@ import {
   Box,
   Plus,
   Trash2,
+  UserCheck,
+  History,
 } from "lucide-react";
 
 type MEvent = {
@@ -26,6 +28,8 @@ type MEvent = {
   event_type: string;
   description: string | null;
   status: "abierto" | "en_proceso" | "cerrado";
+  assigned_to: string | null;
+  closed_by: string | null;
   created_at: string;
   resolved_at: string | null;
   pozo?: { identifier: string } | null;
@@ -52,6 +56,19 @@ type Usage = {
   item?: { sku: string; description: string; unit: string } | null;
 };
 
+type Technician = { id: string; full_name: string };
+
+type HistoryRow = {
+  id: string;
+  action: "asignar" | "reasignar" | "cerrar" | "reabrir" | "tomar";
+  actor_id: string | null;
+  target_id: string | null;
+  notes: string | null;
+  created_at: string;
+  actor?: { full_name: string } | null;
+  target?: { full_name: string } | null;
+};
+
 const EVENT_LABELS: Record<string, string> = {
   cloro_alto: "Cloro residual alto",
   cloro_bajo: "Cloro residual bajo",
@@ -71,18 +88,38 @@ const STATUS_LABELS: Record<MEvent["status"], string> = {
   cerrado: "Cerrado",
 };
 
+const ACTION_LABELS: Record<HistoryRow["action"], string> = {
+  asignar: "Asignado",
+  reasignar: "Reasignado",
+  cerrar: "Cerrado",
+  reabrir: "Reabierto",
+  tomar: "Tomado",
+};
+
 export default function MantenimientoDetalle() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const id = params.id;
+  const { session, profile } = useAuth();
+  const canAssign = usePermission("inventory.out");
+  const canManage = !!profile?.permissions.maintenance?.assign;
+  const canOut = canAssign;
 
   const [event, setEvent] = useState<MEvent | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [usages, setUsages] = useState<Usage[]>([]);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [assignedProfile, setAssignedProfile] = useState<Technician | null>(null);
+  const [closedByProfile, setClosedByProfile] = useState<Technician | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const canOut = usePermission("inventory.out");
+  const [showAssign, setShowAssign] = useState(false);
+  const [selectedTech, setSelectedTech] = useState("");
+  const [reopenNotes, setReopenNotes] = useState("");
+  const [showReopen, setShowReopen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const [itemId, setItemId] = useState("");
   const [qty, setQty] = useState("");
   const [description, setDescription] = useState("");
@@ -94,12 +131,10 @@ export default function MantenimientoDetalle() {
 
   const load = async () => {
     setLoading(true);
-    const [ev, it, us] = await Promise.all([
+    const [ev, it, us, tk, hs] = await Promise.all([
       supabase
         .from("maintenance_events")
-        .select(
-          "*, pozo:pozo_id(identifier), poi:poi_id(name)"
-        )
+        .select("*, pozo:pozo_id(identifier), poi:poi_id(name)")
         .eq("id", id)
         .single(),
       supabase
@@ -108,28 +143,120 @@ export default function MantenimientoDetalle() {
         .order("sku"),
       supabase
         .from("inventory_usages")
-        .select(
-          "*, item:item_id(sku, description, unit)"
-        )
+        .select("*, item:item_id(sku, description, unit)")
         .eq("maintenance_event_id", id)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("user_profiles")
+        .select("id, full_name, is_active")
+        .eq("is_active", true)
+        .order("full_name"),
+      supabase
+        .from("maintenance_history")
+        .select(
+          "*, actor:actor_id(full_name), target:target_id(full_name)"
+        )
+        .eq("event_id", id)
+        .order("created_at", { ascending: false }),
     ]);
-    setEvent((ev.data as MEvent) || null);
+    const e = (ev.data as MEvent) || null;
+    setEvent(e);
     setItems((it.data as Item[]) || []);
     setUsages((us.data as Usage[]) || []);
+    setTechnicians(((tk.data as Technician[]) || []));
+    setHistory((hs.data as HistoryRow[]) || []);
+
+    if (e?.assigned_to) {
+      const a = (tk.data as Technician[] | null)?.find(
+        (t) => t.id === e.assigned_to
+      );
+      setAssignedProfile(a || null);
+    } else setAssignedProfile(null);
+
+    if (e?.closed_by) {
+      const c = (tk.data as Technician[] | null)?.find(
+        (t) => t.id === e.closed_by
+      );
+      setClosedByProfile(c || null);
+    } else setClosedByProfile(null);
+
     setLoading(false);
   };
 
-  const updateStatus = async (newStatus: MEvent["status"]) => {
-    if (!event) return;
+  const logHistory = async (
+    action: HistoryRow["action"],
+    target_id: string | null,
+    notes: string | null
+  ) => {
+    await supabase.from("maintenance_history").insert({
+      event_id: id,
+      action,
+      actor_id: session?.user.id || null,
+      target_id,
+      notes,
+    });
+  };
+
+  const handleAssign = async () => {
+    if (!event || !selectedTech || busy) return;
     setBusy(true);
-    const updates: Record<string, string | null> = { status: newStatus };
-    updates.resolved_at =
-      newStatus === "cerrado" ? new Date().toISOString() : null;
+    setActionError(null);
+    const isReassign = !!event.assigned_to;
     await supabase
       .from("maintenance_events")
-      .update(updates)
+      .update({
+        status: "en_proceso",
+        assigned_to: selectedTech,
+      })
       .eq("id", event.id);
+    await logHistory(isReassign ? "reasignar" : "asignar", selectedTech, null);
+    setSelectedTech("");
+    setShowAssign(false);
+    setBusy(false);
+    load();
+  };
+
+  const handleClose = async () => {
+    if (!event || busy) return;
+    if (event.assigned_to !== session?.user.id) {
+      setActionError("Solo el técnico asignado puede cerrar este evento.");
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    await supabase
+      .from("maintenance_events")
+      .update({
+        status: "cerrado",
+        closed_by: session.user.id,
+        resolved_at: new Date().toISOString(),
+      })
+      .eq("id", event.id);
+    await logHistory("cerrar", null, null);
+    setBusy(false);
+    load();
+  };
+
+  const handleReopen = async () => {
+    if (!event || busy) return;
+    if (event.closed_by && event.closed_by === session?.user.id) {
+      setActionError(
+        "Quien cerró el evento no puede reabrirlo. Debe hacerlo otro supervisor."
+      );
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    await supabase
+      .from("maintenance_events")
+      .update({
+        status: "en_proceso",
+        resolved_at: null,
+      })
+      .eq("id", event.id);
+    await logHistory("reabrir", null, reopenNotes.trim() || null);
+    setReopenNotes("");
+    setShowReopen(false);
     setBusy(false);
     load();
   };
@@ -223,6 +350,13 @@ export default function MantenimientoDetalle() {
     event.pozo?.identifier || event.poi?.name || "Sin origen";
 
   const totalSpent = usages.reduce((a, u) => a + Number(u.total_cost), 0);
+  const isAssignedToMe = event.assigned_to === session?.user.id;
+  const canCloseNow =
+    event.status !== "cerrado" && isAssignedToMe;
+  const canReopenNow =
+    event.status === "cerrado" &&
+    canManage &&
+    event.closed_by !== session?.user.id;
 
   return (
     <div className="w-full max-w-4xl mx-auto py-8">
@@ -236,8 +370,8 @@ export default function MantenimientoDetalle() {
 
       <div className="bg-white rounded-2xl p-6 border border-gray-100 mb-6">
         <div className="flex items-start justify-between gap-3 mb-3">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span
                 className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${STATUS_COLORS[event.status]}`}
               >
@@ -250,10 +384,7 @@ export default function MantenimientoDetalle() {
                   <Activity className="w-3 h-3" />
                 )}
                 {sourceHref ? (
-                  <Link
-                    href={sourceHref}
-                    className="hover:underline text-dtm-blue"
-                  >
+                  <Link href={sourceHref} className="hover:underline text-dtm-blue">
                     {sourceLabel}
                   </Link>
                 ) : (
@@ -268,6 +399,25 @@ export default function MantenimientoDetalle() {
             {event.description && (
               <p className="text-gray-600 mt-2">{event.description}</p>
             )}
+            <div className="mt-3 space-y-1 text-xs">
+              {assignedProfile && (
+                <p className="inline-flex items-center gap-1 text-gray-600">
+                  <UserCheck className="w-3 h-3 text-dtm-blue" />
+                  Asignado a:{" "}
+                  <span className="font-semibold text-gray-800">
+                    {assignedProfile.full_name}
+                  </span>
+                </p>
+              )}
+              {closedByProfile && (
+                <p className="text-gray-600">
+                  Cerrado por:{" "}
+                  <span className="font-semibold text-gray-800">
+                    {closedByProfile.full_name}
+                  </span>
+                </p>
+              )}
+            </div>
             <p className="text-xs text-gray-400 mt-2">
               Creado:{" "}
               {new Date(event.created_at).toLocaleString("es-MX", {
@@ -282,37 +432,131 @@ export default function MantenimientoDetalle() {
         </div>
 
         <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
-          {event.status === "abierto" && (
+          {canManage && event.status !== "cerrado" && (
             <button
               disabled={busy}
-              onClick={() => updateStatus("en_proceso")}
+              onClick={() => {
+                setShowAssign((v) => !v);
+                setShowReopen(false);
+                setActionError(null);
+              }}
               className="px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg disabled:opacity-50 inline-flex items-center gap-1"
             >
-              <Clock className="w-3 h-3" />
-              Tomar
+              <UserCheck className="w-3 h-3" />
+              {event.assigned_to ? "Reasignar" : "Asignar"}
             </button>
           )}
-          {event.status !== "cerrado" && (
+          {canCloseNow && (
             <button
               disabled={busy}
-              onClick={() => updateStatus("cerrado")}
+              onClick={handleClose}
               className="px-3 py-1.5 text-xs font-semibold bg-green-50 text-green-700 hover:bg-green-100 rounded-lg disabled:opacity-50 inline-flex items-center gap-1"
             >
               <CheckCircle2 className="w-3 h-3" />
               Cerrar
             </button>
           )}
-          {event.status === "cerrado" && (
+          {canReopenNow && (
             <button
               disabled={busy}
-              onClick={() => updateStatus("abierto")}
+              onClick={() => {
+                setShowReopen((v) => !v);
+                setShowAssign(false);
+                setActionError(null);
+              }}
               className="px-3 py-1.5 text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg disabled:opacity-50 inline-flex items-center gap-1"
             >
               <AlertTriangle className="w-3 h-3" />
               Reabrir
             </button>
           )}
+          {event.status !== "cerrado" &&
+            !isAssignedToMe &&
+            !canManage &&
+            event.assigned_to && (
+              <span className="text-xs text-gray-500 inline-flex items-center gap-1 px-2 py-1">
+                <Clock className="w-3 h-3" />
+                Solo el técnico asignado puede cerrar.
+              </span>
+            )}
         </div>
+
+        {showAssign && canManage && (
+          <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+            <label className="block text-sm font-medium text-gray-700">
+              Técnico responsable
+            </label>
+            <select
+              value={selectedTech}
+              onChange={(e) => setSelectedTech(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 bg-white text-sm"
+            >
+              <option value="">Selecciona un técnico...</option>
+              {technicians.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.full_name}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowAssign(false);
+                  setSelectedTech("");
+                }}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAssign}
+                disabled={busy || !selectedTech}
+                className="flex-1 px-3 py-2 bg-dtm-blue text-white rounded-xl text-sm font-semibold hover:bg-blue-800 disabled:opacity-50"
+              >
+                {busy ? "Guardando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showReopen && canReopenNow && (
+          <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+            <label className="block text-sm font-medium text-gray-700">
+              Motivo de la reapertura
+            </label>
+            <textarea
+              rows={2}
+              value={reopenNotes}
+              onChange={(e) => setReopenNotes(e.target.value)}
+              placeholder="Describe por qué se reabre el evento..."
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowReopen(false);
+                  setReopenNotes("");
+                }}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleReopen}
+                disabled={busy}
+                className="flex-1 px-3 py-2 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 disabled:opacity-50"
+              >
+                {busy ? "Guardando..." : "Confirmar Reapertura"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {actionError && (
+          <p className="mt-3 text-sm text-red-600 bg-red-50 rounded-lg p-2">
+            {actionError}
+          </p>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl p-6 border border-gray-100 mb-6">
@@ -406,9 +650,7 @@ export default function MantenimientoDetalle() {
                     })}
                   </p>
                   {u.description && (
-                    <p className="text-xs text-gray-600 mt-1">
-                      {u.description}
-                    </p>
+                    <p className="text-xs text-gray-600 mt-1">{u.description}</p>
                   )}
                 </div>
                 {event.status !== "cerrado" && canOut && (
@@ -420,6 +662,52 @@ export default function MantenimientoDetalle() {
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl p-6 border border-gray-100">
+        <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
+          <History className="w-5 h-5 text-dtm-blue" />
+          Historial del evento
+        </h2>
+        {history.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">
+            Sin acciones registradas.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {history.map((h) => (
+              <div
+                key={h.id}
+                className="border-t border-gray-100 pt-3 text-sm first:border-t-0 first:pt-0"
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <p className="font-semibold text-gray-800">
+                    {ACTION_LABELS[h.action]}
+                    {h.target?.full_name && (
+                      <span className="font-normal text-gray-600">
+                        {" "}
+                        → {h.target.full_name}
+                      </span>
+                    )}
+                  </p>
+                  <span className="text-xs text-gray-400 shrink-0">
+                    {new Date(h.created_at).toLocaleString("es-MX", {
+                      timeZone: "America/Mexico_City",
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Por: {h.actor?.full_name || "—"}
+                </p>
+                {h.notes && (
+                  <p className="text-xs text-gray-700 italic mt-1">{h.notes}</p>
                 )}
               </div>
             ))}

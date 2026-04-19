@@ -10,10 +10,14 @@ import {
   X,
   AlertTriangle,
   Wrench,
+  Clock,
+  Save,
+  MapPin,
 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
 
-const CHLORINE_UPPER_THRESHOLD = 1.5; // mg/L
+const CHLORINE_UPPER_THRESHOLD = 1.5;
 
 function getTodayMexicoCity(): string {
   return new Date().toLocaleDateString("en-CA", {
@@ -21,35 +25,35 @@ function getTodayMexicoCity(): string {
   });
 }
 
+type Pozo = {
+  id: string;
+  identifier: string;
+  kind: "urbano" | "rural" | null;
+};
+type Point = { id: string; address: string; position: number };
 type Tank = { id: string; identifier: string };
+type Review = {
+  id: string;
+  sampling_point_id: string | null;
+  chlorine_residual: number;
+  sample_time: string | null;
+  signed_by: string | null;
+};
+type SignerName = { id: string; full_name: string };
+type Hipoclorito = { id: string; current_qty: number };
 
 export default function RevisionDiariaPozo() {
   const params = useParams();
   const poziId = params?.id as string;
+  const { session, profile } = useAuth();
 
-  const [pozoName, setPozoName] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  const [pozo, setPozo] = useState<Pozo | null>(null);
+  const [points, setPoints] = useState<Point[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [signers, setSigners] = useState<Record<string, string>>({});
   const [assignedTank, setAssignedTank] = useState<Tank | null>(null);
-
-  const [form, setForm] = useState({
-    chlorine_residual: "",
-    cylinder_weight: "",
-    observations: "",
-  });
-
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [preview, setPreview] = useState("");
-  const fileRef = useRef<HTMLInputElement | null>(null);
-
-  // Maintenance event toggles
-  const [raiseEvent, setRaiseEvent] = useState(false);
-  const [eventType, setEventType] = useState<
-    "cloro_alto" | "cloro_bajo" | "clorador_danado" | "otro"
-  >("cloro_alto");
-  const [eventDescription, setEventDescription] = useState("");
-  const [chloratorDamaged, setChloratorDamaged] = useState(false);
+  const [hipoSku, setHipoSku] = useState<Hipoclorito | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (poziId) loadData();
@@ -59,169 +63,61 @@ export default function RevisionDiariaPozo() {
     setLoading(true);
     const { data: p } = await supabase
       .from("pozos")
-      .select("identifier")
+      .select("id, identifier, kind")
       .eq("id", poziId)
       .single();
-    if (p) setPozoName(p.identifier);
+    setPozo((p as Pozo) || null);
+
+    const { data: ps } = await supabase
+      .from("pozo_sampling_points")
+      .select("id, address, position")
+      .eq("pozo_id", poziId)
+      .order("position");
+    setPoints((ps as Point[]) || []);
 
     const today = getTodayMexicoCity();
-    const { data: existing } = await supabase
+    const { data: rs } = await supabase
       .from("well_daily_reviews")
-      .select("id")
+      .select("id, sampling_point_id, chlorine_residual, sample_time, signed_by")
       .eq("pozo_id", poziId)
-      .eq("review_date", today)
-      .maybeSingle();
-    if (existing) setAlreadySubmitted(true);
+      .eq("review_date", today);
+    setReviews((rs as Review[]) || []);
 
-    const { data: t } = await supabase
-      .from("tanks")
-      .select("id, identifier")
-      .eq("current_pozo_id", poziId)
-      .eq("status", "asignado")
-      .maybeSingle();
-    setAssignedTank((t as Tank) || null);
+    const ids = ((rs as Review[]) || [])
+      .map((r) => r.signed_by)
+      .filter((x): x is string => !!x);
+    if (ids.length > 0) {
+      const { data: us } = await supabase
+        .from("user_profiles")
+        .select("id, full_name")
+        .in("id", ids);
+      const map: Record<string, string> = {};
+      ((us as SignerName[]) || []).forEach((u) => {
+        map[u.id] = u.full_name;
+      });
+      setSigners(map);
+    }
+
+    if (p?.kind === "urbano") {
+      const { data: t } = await supabase
+        .from("tanks")
+        .select("id, identifier")
+        .eq("current_pozo_id", poziId)
+        .eq("status", "asignado")
+        .maybeSingle();
+      setAssignedTank((t as Tank) || null);
+    }
+
+    if (p?.kind === "rural") {
+      const { data: h } = await supabase
+        .from("inventory_items")
+        .select("id, current_qty")
+        .eq("is_hipoclorito", true)
+        .maybeSingle();
+      setHipoSku((h as Hipoclorito) || null);
+    }
 
     setLoading(false);
-  };
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  const handlePhotoChange = (file: File | null) => {
-    setPhoto(file);
-    if (file) setPreview(URL.createObjectURL(file));
-    else setPreview("");
-  };
-
-  const removePhoto = () => {
-    handlePhotoChange(null);
-    if (fileRef.current) fileRef.current.value = "";
-  };
-
-  const uploadPhoto = async (file: File): Promise<string | null> => {
-    const today = getTodayMexicoCity();
-    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-    const path = `wells/${poziId}/${today}/cloro.${ext}`;
-    const { error } = await supabase.storage
-      .from("review-photos")
-      .upload(path, file, {
-        upsert: true,
-        contentType: file.type || "image/jpeg",
-      });
-    if (error) {
-      console.error(error);
-      return null;
-    }
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("review-photos").getPublicUrl(path);
-    return publicUrl;
-  };
-
-  const chlorineNum = parseFloat(form.chlorine_residual);
-  const exceedsThreshold =
-    !isNaN(chlorineNum) && chlorineNum > CHLORINE_UPPER_THRESHOLD;
-  const shouldSuggestEvent = exceedsThreshold || chloratorDamaged;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (alreadySubmitted || saving) return;
-    if (!form.chlorine_residual || !photo) return;
-
-    setSaving(true);
-    const today = getTodayMexicoCity();
-
-    const photoUrl = await uploadPhoto(photo);
-    if (!photoUrl) {
-      setSaving(false);
-      return;
-    }
-
-    const { data: review, error } = await supabase
-      .from("well_daily_reviews")
-      .insert([
-        {
-          pozo_id: poziId,
-          review_date: today,
-          chlorine_residual: chlorineNum,
-          photo_url: photoUrl,
-          cylinder_weight: form.cylinder_weight
-            ? parseFloat(form.cylinder_weight)
-            : null,
-          observations: form.observations.trim() || null,
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      console.error(error);
-      if (error.code === "23505") setAlreadySubmitted(true);
-      setSaving(false);
-      return;
-    }
-
-    // Update pozo last reading
-    await supabase
-      .from("pozos")
-      .update({ last_chlorine_residual: chlorineNum })
-      .eq("id", poziId);
-
-    // Update assigned tank weight if provided
-    if (assignedTank && form.cylinder_weight) {
-      const w = parseFloat(form.cylinder_weight);
-      await supabase
-        .from("tanks")
-        .update({ current_weight_kg: w })
-        .eq("id", assignedTank.id);
-      await supabase.from("tank_events").insert([
-        {
-          tank_id: assignedTank.id,
-          event_type: "lectura_peso",
-          pozo_id: poziId,
-          weight_kg: w,
-          notes: "Lectura de revisión diaria de pozo",
-        },
-      ]);
-    }
-
-    // Maintenance event(s)
-    const events: any[] = [];
-    if (chloratorDamaged) {
-      events.push({
-        source_type: "pozo",
-        pozo_id: poziId,
-        event_type: "clorador_danado",
-        description: eventDescription.trim() || null,
-        related_review_id: review.id,
-      });
-    }
-    if (raiseEvent && !chloratorDamaged) {
-      events.push({
-        source_type: "pozo",
-        pozo_id: poziId,
-        event_type: eventType,
-        description: eventDescription.trim() || null,
-        related_review_id: review.id,
-      });
-    } else if (raiseEvent && chloratorDamaged && eventType !== "clorador_danado") {
-      events.push({
-        source_type: "pozo",
-        pozo_id: poziId,
-        event_type: eventType,
-        description: eventDescription.trim() || null,
-        related_review_id: review.id,
-      });
-    }
-    if (events.length > 0) {
-      await supabase.from("maintenance_events").insert(events);
-    }
-
-    setAlreadySubmitted(true);
-    setSaving(false);
   };
 
   if (loading) {
@@ -231,23 +127,37 @@ export default function RevisionDiariaPozo() {
       </div>
     );
   }
+  if (!pozo) return null;
+
+  const reviewsByPoint = new Map(reviews.map((r) => [r.sampling_point_id, r]));
 
   return (
-    <div className="w-full max-w-2xl mx-auto py-8">
+    <div className="w-full max-w-3xl mx-auto py-8">
       <Link
         href={`/pozos/${poziId}`}
         className="inline-flex items-center text-dtm-blue hover:underline mb-6 font-medium"
       >
         <ArrowLeft className="w-4 h-4 mr-1" />
-        Regresar a {pozoName}
+        Regresar a {pozo.identifier}
       </Link>
 
       <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-100">
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">
-          Revisión Diaria de Pozo
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <h1 className="text-2xl font-bold text-gray-800">
+            Revisión Diaria de Pozo
+          </h1>
+          <span
+            className={`text-xs font-bold uppercase px-2 py-1 rounded-full ${
+              pozo.kind === "rural"
+                ? "bg-amber-100 text-amber-700"
+                : "bg-sky-100 text-sky-700"
+            }`}
+          >
+            {pozo.kind === "rural" ? "Rural · hipoclorito" : "Urbano · gas-cloro"}
+          </span>
+        </div>
         <p className="text-gray-500 mb-6">
-          {pozoName} —{" "}
+          {pozo.identifier} —{" "}
           {new Date().toLocaleDateString("es-MX", {
             timeZone: "America/Mexico_City",
             weekday: "long",
@@ -257,248 +167,455 @@ export default function RevisionDiariaPozo() {
           })}
         </p>
 
-        {alreadySubmitted ? (
-          <div className="text-center py-10">
-            <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">
-              Revisión Registrada
-            </h2>
-            <p className="text-gray-500 max-w-sm mx-auto">
-              Ya se registró la revisión de hoy. El siguiente registro estará
-              disponible mañana a las 00:01 hrs (hora CDMX).
-            </p>
-            <Link
-              href={`/pozos/${poziId}`}
-              className="inline-block mt-6 bg-dtm-blue text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-800 transition-colors"
-            >
-              Volver al Pozo
-            </Link>
+        {points.length === 0 ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
+            Este pozo no tiene ubicaciones de muestreo registradas. Edítalo y
+            agrega al menos una ubicación.
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Cloro residual */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Cloro residual
-              </label>
-              <div className="relative">
-                <input
-                  name="chlorine_residual"
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  required
-                  value={form.chlorine_residual}
-                  onChange={handleChange}
-                  placeholder="0.00"
-                  className={`w-full border rounded-lg px-4 py-3 pr-16 text-gray-800 focus:outline-none focus:ring-2 focus:border-transparent transition ${
-                    exceedsThreshold
-                      ? "border-red-300 focus:ring-red-400 bg-red-50"
-                      : "border-gray-300 focus:ring-dtm-blue"
-                  }`}
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
-                  mg/L
-                </span>
-              </div>
-              {exceedsThreshold && (
-                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  Excede el umbral recomendado ({CHLORINE_UPPER_THRESHOLD}{" "}
-                  mg/L). Considera levantar un evento de mantenimiento.
-                </p>
-              )}
-            </div>
-
-            {/* Foto evidencia */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Foto de evidencia
-              </label>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                id="cloro-photo"
-                onChange={(e) =>
-                  handlePhotoChange(e.target.files?.[0] || null)
+          <div className="space-y-4">
+            {points.map((point) => (
+              <SamplingPointRow
+                key={point.id}
+                pozoId={poziId}
+                point={point}
+                existing={reviewsByPoint.get(point.id) || null}
+                signerName={
+                  reviewsByPoint.get(point.id)?.signed_by
+                    ? signers[reviewsByPoint.get(point.id)!.signed_by!]
+                    : null
                 }
+                userId={session?.user?.id || null}
+                userName={profile?.full_name || ""}
+                onSaved={loadData}
               />
-              {preview ? (
-                <div className="relative">
-                  <img
-                    src={preview}
-                    alt=""
-                    className="w-full h-48 object-cover rounded-lg border border-gray-200"
-                  />
-                  <button
-                    type="button"
-                    onClick={removePhoto}
-                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <label
-                  htmlFor="cloro-photo"
-                  className="flex items-center justify-center gap-2 w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-dtm-blue hover:bg-blue-50 transition text-sm text-gray-500"
-                >
-                  <Camera className="w-4 h-4" />
-                  Adjuntar foto del muestreo
-                </label>
-              )}
-            </div>
+            ))}
+          </div>
+        )}
 
-            {/* Peso del tanque */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Peso actual del tanque de gas-cloro
-              </label>
-              {assignedTank && (
-                <p className="text-xs text-gray-500 mb-2">
-                  Tanque asignado:{" "}
-                  <span className="font-semibold">
-                    {assignedTank.identifier}
-                  </span>{" "}
-                  — actualizará automáticamente el peso registrado.
-                </p>
-              )}
-              <div className="relative">
-                <input
-                  name="cylinder_weight"
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  value={form.cylinder_weight}
-                  onChange={handleChange}
-                  placeholder="0.00"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 pr-12 text-gray-800 focus:outline-none focus:ring-2 focus:ring-dtm-blue focus:border-transparent transition"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
-                  KG
-                </span>
-              </div>
-            </div>
+        {pozo.kind === "urbano" && assignedTank && (
+          <TankWeightSection
+            pozoId={poziId}
+            tank={assignedTank}
+            userId={session?.user?.id || null}
+            onSaved={loadData}
+          />
+        )}
 
-            {/* Sistema clorador dañado */}
-            <div className="border border-gray-200 rounded-xl p-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={chloratorDamaged}
-                  onChange={(e) => setChloratorDamaged(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-dtm-blue rounded"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">
-                    Sistema clorador dañado
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Marcar si se detectó alguna falla en el sistema. Se generará
-                    automáticamente un evento de mantenimiento.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            {/* Levantar evento opcional */}
-            <div
-              className={`border rounded-xl p-4 ${
-                shouldSuggestEvent
-                  ? "border-amber-300 bg-amber-50"
-                  : "border-gray-200"
-              }`}
-            >
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={raiseEvent}
-                  onChange={(e) => setRaiseEvent(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-amber-600 rounded"
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                    <Wrench className="w-4 h-4 text-amber-600" />
-                    Levantar evento de mantenimiento adicional
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {shouldSuggestEvent
-                      ? "Se sugiere por el cloro fuera de rango o falla del clorador."
-                      : "Marca si necesitas reportar otra incidencia."}
-                  </p>
-                </div>
-              </label>
-
-              {raiseEvent && (
-                <div className="mt-4 space-y-3 pl-7">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Tipo de evento
-                    </label>
-                    <select
-                      value={eventType}
-                      onChange={(e) =>
-                        setEventType(e.target.value as typeof eventType)
-                      }
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    >
-                      <option value="cloro_alto">Cloro residual alto</option>
-                      <option value="cloro_bajo">Cloro residual bajo</option>
-                      <option value="clorador_danado">
-                        Sistema clorador dañado
-                      </option>
-                      <option value="otro">Otro</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Descripción
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={eventDescription}
-                      onChange={(e) => setEventDescription(e.target.value)}
-                      placeholder="Detalla el problema..."
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Observaciones */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Observaciones
-              </label>
-              <textarea
-                name="observations"
-                rows={3}
-                value={form.observations}
-                onChange={handleChange}
-                placeholder="Notas adicionales..."
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-dtm-blue focus:border-transparent transition resize-none"
-              />
-            </div>
-
-            {!photo && (
-              <p className="text-sm text-amber-600 bg-amber-50 px-4 py-2 rounded-lg">
-                Debes adjuntar la foto de evidencia para finalizar.
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={saving || !photo || !form.chlorine_residual}
-              className="w-full bg-dtm-blue text-white py-3 rounded-xl font-semibold hover:bg-blue-800 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? "Guardando..." : "Finalizar Registro"}
-            </button>
-          </form>
+        {pozo.kind === "rural" && (
+          <HipocloritoSection
+            pozoId={poziId}
+            sku={hipoSku}
+            userId={session?.user?.id || null}
+            onSaved={loadData}
+          />
         )}
       </div>
+    </div>
+  );
+}
+
+function SamplingPointRow({
+  pozoId,
+  point,
+  existing,
+  signerName,
+  userId,
+  userName,
+  onSaved,
+}: {
+  pozoId: string;
+  point: Point;
+  existing: Review | null;
+  signerName: string | null;
+  userId: string | null;
+  userName: string;
+  onSaved: () => void;
+}) {
+  const [chlorine, setChlorine] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const value = parseFloat(chlorine);
+  const exceeds = !isNaN(value) && value > CHLORINE_UPPER_THRESHOLD;
+
+  const setFile = (f: File | null) => {
+    setPhoto(f);
+    setPreview(f ? URL.createObjectURL(f) : "");
+  };
+
+  const upload = async (file: File): Promise<string | null> => {
+    const today = getTodayMexicoCity();
+    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `wells/${pozoId}/${today}/${point.id}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("review-photos")
+      .upload(path, file, {
+        upsert: true,
+        contentType: file.type || "image/jpeg",
+      });
+    if (upErr) return null;
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("review-photos").getPublicUrl(path);
+    return publicUrl;
+  };
+
+  const submit = async () => {
+    setError(null);
+    if (!chlorine || isNaN(value)) {
+      setError("Captura un valor de cloro residual.");
+      return;
+    }
+    if (!photo) {
+      setError("Adjunta la foto de evidencia.");
+      return;
+    }
+    setSaving(true);
+    const photoUrl = await upload(photo);
+    if (!photoUrl) {
+      setError("No se pudo subir la foto.");
+      setSaving(false);
+      return;
+    }
+    const today = getTodayMexicoCity();
+    const { error: insErr } = await supabase.from("well_daily_reviews").insert({
+      pozo_id: pozoId,
+      sampling_point_id: point.id,
+      review_date: today,
+      chlorine_residual: value,
+      photo_url: photoUrl,
+      sample_time: new Date().toISOString(),
+      signed_by: userId,
+    });
+    if (insErr) {
+      setError(insErr.message);
+      setSaving(false);
+      return;
+    }
+    await supabase
+      .from("pozos")
+      .update({ last_chlorine_residual: value })
+      .eq("id", pozoId);
+    setSaving(false);
+    onSaved();
+  };
+
+  if (existing) {
+    return (
+      <div className="border border-green-200 bg-green-50 rounded-xl p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-gray-800 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-green-600" />
+              {point.address}
+            </p>
+            <p className="text-sm text-gray-700 mt-1">
+              <span className="font-bold">{existing.chlorine_residual}</span>{" "}
+              mg/L · Hora:{" "}
+              {existing.sample_time
+                ? new Date(existing.sample_time).toLocaleTimeString("es-MX", {
+                    timeZone: "America/Mexico_City",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "--"}
+            </p>
+            {signerName && (
+              <p className="text-xs text-gray-500 mt-1">
+                Firmado por: <span className="font-medium">{signerName}</span>
+              </p>
+            )}
+          </div>
+          <CheckCircle2 className="w-6 h-6 text-green-600 shrink-0" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4">
+      <p className="font-semibold text-gray-800 flex items-center gap-2 mb-3">
+        <MapPin className="w-4 h-4 text-dtm-blue" />
+        {point.address}
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Cloro residual (mg/L)
+          </label>
+          <input
+            type="number"
+            step="any"
+            inputMode="decimal"
+            value={chlorine}
+            onChange={(e) => setChlorine(e.target.value)}
+            placeholder="0.00"
+            className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 ${
+              exceeds
+                ? "border-red-300 bg-red-50 focus:ring-red-400"
+                : "border-gray-300 focus:ring-dtm-blue"
+            }`}
+          />
+          {exceeds && (
+            <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" />
+              Excede {CHLORINE_UPPER_THRESHOLD} mg/L
+            </p>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Foto evidencia
+          </label>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            id={`file-${point.id}`}
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+          {preview ? (
+            <div className="relative">
+              <img
+                src={preview}
+                alt=""
+                className="w-full h-20 object-cover rounded-lg border"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setFile(null);
+                  if (fileRef.current) fileRef.current.value = "";
+                }}
+                className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <label
+              htmlFor={`file-${point.id}`}
+              className="flex items-center justify-center gap-1 w-full h-20 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-dtm-blue hover:bg-blue-50 text-xs text-gray-500"
+            >
+              <Camera className="w-3.5 h-3.5" /> Adjuntar
+            </label>
+          )}
+        </div>
+      </div>
+      {error && (
+        <p className="text-xs text-red-600 mt-2 bg-red-50 px-3 py-1.5 rounded-lg">
+          {error}
+        </p>
+      )}
+      <p className="text-[11px] text-gray-400 mt-2 flex items-center gap-1">
+        <Clock className="w-3 h-3" /> Al guardar se registra la hora actual.
+        Firmará: <span className="font-medium">{userName || "tu usuario"}</span>
+      </p>
+      <button
+        type="button"
+        onClick={submit}
+        disabled={saving}
+        className="mt-3 w-full inline-flex items-center justify-center gap-2 bg-dtm-blue text-white py-2 rounded-lg font-semibold hover:bg-blue-800 disabled:opacity-50"
+      >
+        <Save className="w-4 h-4" />
+        {saving ? "Guardando..." : "Guardar muestra"}
+      </button>
+    </div>
+  );
+}
+
+function TankWeightSection({
+  pozoId,
+  tank,
+  userId,
+  onSaved,
+}: {
+  pozoId: string;
+  tank: Tank;
+  userId: string | null;
+  onSaved: () => void;
+}) {
+  const [weight, setWeight] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const submit = async () => {
+    if (!weight) return;
+    setSaving(true);
+    const w = parseFloat(weight);
+    await supabase.from("tanks").update({ current_weight_kg: w }).eq("id", tank.id);
+    await supabase.from("tank_events").insert({
+      tank_id: tank.id,
+      event_type: "lectura_peso",
+      pozo_id: pozoId,
+      weight_kg: w,
+      notes: "Lectura de revisión diaria",
+    });
+    void userId;
+    setSaving(false);
+    setDone(true);
+    onSaved();
+  };
+
+  return (
+    <div className="mt-6 border-t border-gray-100 pt-6">
+      <h3 className="font-semibold text-gray-800 mb-2">
+        Peso actual del tanque ({tank.identifier})
+      </h3>
+      {done ? (
+        <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+          Peso actualizado.
+        </p>
+      ) : (
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <input
+              type="number"
+              step="any"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              placeholder="0.00"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-dtm-blue"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">
+              KG
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={saving || !weight}
+            onClick={submit}
+            className="bg-dtm-blue text-white px-4 rounded-lg font-semibold hover:bg-blue-800 disabled:opacity-50"
+          >
+            {saving ? "..." : "Guardar"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HipocloritoSection({
+  pozoId,
+  sku,
+  userId,
+  onSaved,
+}: {
+  pozoId: string;
+  sku: Hipoclorito | null;
+  userId: string | null;
+  onSaved: () => void;
+}) {
+  const [qty, setQty] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  if (!sku) {
+    return (
+      <div className="mt-6 border-t border-gray-100 pt-6">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
+          No hay un SKU marcado como hipoclorito en inventario. Agrega o marca
+          uno en Inventario para registrar rellenos.
+        </div>
+      </div>
+    );
+  }
+
+  const submit = async () => {
+    setError(null);
+    const q = parseFloat(qty);
+    if (!q || q <= 0) {
+      setError("Ingresa una cantidad válida.");
+      return;
+    }
+    if (q > Number(sku.current_qty)) {
+      setError(
+        `Existencia insuficiente (${sku.current_qty} kg disponibles).`
+      );
+      return;
+    }
+    setSaving(true);
+    const { data: item } = await supabase
+      .from("inventory_items")
+      .select("price")
+      .eq("id", sku.id)
+      .single();
+    const price = Number(item?.price || 0);
+    const ins = await supabase.from("inventory_usages").insert({
+      item_id: sku.id,
+      qty: q,
+      unit_price_snapshot: price,
+      total_cost: price * q,
+      source_type: "pozo",
+      pozo_id: pozoId,
+      description: "Relleno de hipoclorito en revisión diaria",
+    });
+    if (ins.error) {
+      setError(ins.error.message);
+      setSaving(false);
+      return;
+    }
+    await supabase
+      .from("inventory_items")
+      .update({ current_qty: Number(sku.current_qty) - q })
+      .eq("id", sku.id);
+    void userId;
+    setSaving(false);
+    setDone(true);
+    onSaved();
+  };
+
+  return (
+    <div className="mt-6 border-t border-gray-100 pt-6">
+      <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+        <Wrench className="w-4 h-4 text-amber-600" />
+        Relleno de hipoclorito
+      </h3>
+      <p className="text-xs text-gray-500 mb-3">
+        Existencia actual: <span className="font-semibold">{sku.current_qty} kg</span>
+      </p>
+      {done ? (
+        <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+          Relleno registrado y descontado del inventario.
+        </p>
+      ) : (
+        <>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type="number"
+                step="any"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                placeholder="0.00"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-dtm-blue"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">
+                KG
+              </span>
+            </div>
+            <button
+              type="button"
+              disabled={saving || !qty}
+              onClick={submit}
+              className="bg-amber-600 text-white px-4 rounded-lg font-semibold hover:bg-amber-700 disabled:opacity-50"
+            >
+              {saving ? "..." : "Registrar"}
+            </button>
+          </div>
+          {error && (
+            <p className="text-xs text-red-600 mt-2 bg-red-50 px-3 py-1.5 rounded-lg">
+              {error}
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 }

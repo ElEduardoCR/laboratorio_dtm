@@ -42,6 +42,8 @@ type Review = {
   photo_hardness_input: string | null;
   photo_hardness_output: string | null;
   created_at: string;
+  signed_by: string | null;
+  signer?: { full_name: string } | null;
 };
 
 type WeeklyReview = {
@@ -68,6 +70,8 @@ type WeeklyReview = {
   ro_system_photo: string | null;
   bigblue_filter_photo: string | null;
   uv_lamp_photo: string | null;
+  signed_by: string | null;
+  signer?: { full_name: string } | null;
 };
 
 type FilterType = "diarias" | "semanales" | "mensuales";
@@ -142,7 +146,29 @@ export default function POIDetail() {
         .eq("poi_id", id)
         .order("review_date", { ascending: false })
         .limit(20);
-      setWeeklyReviews((data as WeeklyReview[]) || []);
+      const wRows = (data as WeeklyReview[]) || [];
+      const wIds = Array.from(
+        new Set(wRows.map((r) => r.signed_by).filter(Boolean))
+      ) as string[];
+      if (wIds.length) {
+        const { data: profs } = await supabase
+          .from("user_profiles")
+          .select("id, full_name")
+          .in("id", wIds);
+        const byId = new Map(
+          ((profs as { id: string; full_name: string }[]) || []).map((p) => [
+            p.id,
+            p,
+          ])
+        );
+        wRows.forEach((r) => {
+          if (r.signed_by) {
+            const p = byId.get(r.signed_by);
+            r.signer = p ? { full_name: p.full_name } : null;
+          }
+        });
+      }
+      setWeeklyReviews(wRows);
       setReviews([]);
       setLoadingReviews(false);
       return;
@@ -166,11 +192,32 @@ export default function POIDetail() {
 
     const allReviews = (data || []) as Review[];
 
-    if (filter === "diarias") {
-      setReviews(allReviews.slice(0, 10));
-    } else {
-      setReviews(getOnePerMonth(allReviews, 10));
+    const sliced =
+      filter === "diarias"
+        ? allReviews.slice(0, 10)
+        : getOnePerMonth(allReviews, 10);
+    const sIds = Array.from(
+      new Set(sliced.map((r) => r.signed_by).filter(Boolean))
+    ) as string[];
+    if (sIds.length) {
+      const { data: profs } = await supabase
+        .from("user_profiles")
+        .select("id, full_name")
+        .in("id", sIds);
+      const byId = new Map(
+        ((profs as { id: string; full_name: string }[]) || []).map((p) => [
+          p.id,
+          p,
+        ])
+      );
+      sliced.forEach((r) => {
+        if (r.signed_by) {
+          const p = byId.get(r.signed_by);
+          r.signer = p ? { full_name: p.full_name } : null;
+        }
+      });
     }
+    setReviews(sliced);
 
     setWeeklyReviews([]);
     setLoadingReviews(false);
@@ -548,6 +595,11 @@ export default function POIDetail() {
                       <p className="text-sm font-semibold text-gray-800">
                         {formatDate(r.review_date)}
                       </p>
+                      {r.signer?.full_name && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Firmado por: {r.signer.full_name}
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-500">
                         <span>
                           Cloro: {r.chlorine_input ?? "--"} /{" "}
@@ -733,6 +785,11 @@ function WeeklyReviewRow({
               </span>
             )}
           </p>
+          {review.signer?.full_name && (
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              Firmado por: {review.signer.full_name}
+            </p>
+          )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-500">
             {review.collection_amount !== null && (
               <span>

@@ -29,6 +29,7 @@ export type Permissions = {
   };
   inventory: { in?: boolean; out?: boolean };
   tanks: { in?: boolean; out?: boolean };
+  maintenance: { assign?: boolean };
 };
 
 export type Profile = {
@@ -55,6 +56,7 @@ function emptyPerms(): Permissions {
     create: {},
     inventory: {},
     tanks: {},
+    maintenance: {},
   };
 }
 

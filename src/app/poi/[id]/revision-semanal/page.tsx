@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/utils/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -65,6 +66,7 @@ const STATUS_OPTIONS: { value: Status; label: string; color: string }[] = [
 export default function RevisionSemanal() {
   const params = useParams();
   const poiId = params?.id as string;
+  const { session } = useAuth();
 
   const [poiName, setPoiName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -230,6 +232,7 @@ export default function RevisionSemanal() {
         review_date: todayStr,
         is_operational: false,
         observations: form.observations.trim() || null,
+        signed_by: session?.user.id || null,
       },
     ]);
 
@@ -310,6 +313,7 @@ export default function RevisionSemanal() {
         ro_system_photo: mediaUrls.ro_system_photo,
         bigblue_filter_photo: mediaUrls.bigblue_filter_photo,
         uv_lamp_photo: mediaUrls.uv_lamp_photo,
+        signed_by: session?.user.id || null,
       },
     ]);
 

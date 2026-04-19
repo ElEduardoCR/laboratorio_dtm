@@ -16,6 +16,7 @@ export default function NuevoItem() {
   const [supplier, setSupplier] = useState("");
   const [supplierQty, setSupplierQty] = useState("");
   const [price, setPrice] = useState("");
+  const [isHipoclorito, setIsHipoclorito] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,6 +36,7 @@ export default function NuevoItem() {
       supplier_qty: supplierQty ? Number(supplierQty) : null,
       price: Number(price),
       current_qty: 0,
+      is_hipoclorito: isHipoclorito,
     });
     setSaving(false);
     if (error) {
@@ -151,6 +153,24 @@ export default function NuevoItem() {
             />
           </div>
         </div>
+
+        <label className="flex items-start gap-3 cursor-pointer border border-gray-200 rounded-xl p-3">
+          <input
+            type="checkbox"
+            checked={isHipoclorito}
+            onChange={(e) => setIsHipoclorito(e.target.checked)}
+            className="mt-1 w-4 h-4 text-dtm-blue rounded"
+          />
+          <div>
+            <p className="text-sm font-semibold text-gray-800">
+              Es hipoclorito (rellenos de pozos rurales)
+            </p>
+            <p className="text-xs text-gray-500">
+              Marca este SKU como el inventario que se descuenta al rellenar
+              pozos rurales en su revisión diaria.
+            </p>
+          </div>
+        </label>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">

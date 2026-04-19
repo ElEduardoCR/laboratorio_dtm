@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { supabase } from "@/utils/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 import { ArrowLeft, CheckCircle2, Camera, X } from "lucide-react";
 import Link from "next/link";
 
@@ -27,8 +28,8 @@ const PHOTO_FIELDS: { key: PhotoField; label: string }[] = [
 
 export default function RevisionDiaria() {
   const params = useParams();
-  const router = useRouter();
   const poiId = params?.id as string;
+  const { session } = useAuth();
 
   const [poiName, setPoiName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -40,7 +41,6 @@ export default function RevisionDiaria() {
     chlorine_output: "",
     hardness_input: "",
     hardness_output: "",
-    cylinder_weight: "",
     observations: "",
   });
 
@@ -146,8 +146,7 @@ export default function RevisionDiaria() {
       !form.chlorine_input ||
       !form.chlorine_output ||
       !form.hardness_input ||
-      !form.hardness_output ||
-      !form.cylinder_weight
+      !form.hardness_output
     )
       return;
     if (!allPhotosAttached) return;
@@ -178,9 +177,9 @@ export default function RevisionDiaria() {
         chlorine_output: parseFloat(form.chlorine_output),
         hardness_input: parseFloat(form.hardness_input),
         hardness_output: parseFloat(form.hardness_output),
-        cylinder_weight: parseFloat(form.cylinder_weight),
         observations: form.observations.trim() || null,
         review_date: todayStr,
+        signed_by: session?.user.id || null,
         photo_chlorine_input: photoUrls.photo_chlorine_input,
         photo_chlorine_output: photoUrls.photo_chlorine_output,
         photo_hardness_input: photoUrls.photo_hardness_input,
@@ -205,30 +204,6 @@ export default function RevisionDiaria() {
         hardness_product: parseFloat(form.hardness_output),
       })
       .eq("id", poiId);
-
-    // Update assigned tank weight (if any)
-    const cylinderWeight = parseFloat(form.cylinder_weight);
-    const { data: assignedTank } = await supabase
-      .from("tanks")
-      .select("id")
-      .eq("current_poi_id", poiId)
-      .eq("status", "asignado")
-      .maybeSingle();
-    if (assignedTank) {
-      await supabase
-        .from("tanks")
-        .update({ current_weight_kg: cylinderWeight })
-        .eq("id", assignedTank.id);
-      await supabase.from("tank_events").insert([
-        {
-          tank_id: assignedTank.id,
-          event_type: "lectura_peso",
-          poi_id: poiId,
-          weight_kg: cylinderWeight,
-          notes: "Lectura de revisión diaria",
-        },
-      ]);
-    }
 
     setAlreadySubmitted(true);
     setSaving(false);
@@ -453,33 +428,6 @@ export default function RevisionDiaria() {
                     }}
                   />
                 </div>
-              </div>
-            </div>
-
-            {/* Peso del Cilindro */}
-            <div>
-              <label
-                htmlFor="cylinder_weight"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Peso Actual del Cilindro Cloro-Gas
-              </label>
-              <div className="relative">
-                <input
-                  id="cylinder_weight"
-                  name="cylinder_weight"
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  required
-                  value={form.cylinder_weight}
-                  onChange={handleChange}
-                  placeholder="0.00"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 pr-12 text-gray-800 focus:outline-none focus:ring-2 focus:ring-dtm-blue focus:border-transparent transition"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
-                  KG
-                </span>
               </div>
             </div>
 

@@ -33,7 +33,7 @@ type Tank = {
 };
 
 type POI = { id: string; name: string };
-type Pozo = { id: string; identifier: string };
+type Pozo = { id: string; identifier: string; kind?: string | null };
 
 type TankEvent = {
   id: string;
@@ -83,7 +83,6 @@ export default function TanqueDetalle() {
   const [tank, setTank] = useState<Tank | null>(null);
   const [currentPoi, setCurrentPoi] = useState<POI | null>(null);
   const [currentPozo, setCurrentPozo] = useState<Pozo | null>(null);
-  const [pois, setPois] = useState<POI[]>([]);
   const [pozos, setPozos] = useState<Pozo[]>([]);
   const [events, setEvents] = useState<TankEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,8 +91,7 @@ export default function TanqueDetalle() {
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  // Asignar
-  const [destType, setDestType] = useState<"poi" | "pozo">("poi");
+  // Asignar (solo pozos urbanos)
   const [selectedDestId, setSelectedDestId] = useState("");
   const [destCurrentTank, setDestCurrentTank] = useState<{
     id: string;
@@ -114,17 +112,16 @@ export default function TanqueDetalle() {
     const checkDest = async () => {
       setDestCurrentTank(null);
       if (!selectedDestId) return;
-      const col = destType === "poi" ? "current_poi_id" : "current_pozo_id";
       const { data } = await supabase
         .from("tanks")
         .select("id, identifier")
-        .eq(col, selectedDestId)
+        .eq("current_pozo_id", selectedDestId)
         .eq("status", "asignado")
         .maybeSingle();
       if (data) setDestCurrentTank(data);
     };
     checkDest();
-  }, [selectedDestId, destType]);
+  }, [selectedDestId]);
 
   const load = async () => {
     setLoading(true);
@@ -161,15 +158,10 @@ export default function TanqueDetalle() {
       setCurrentPozo(null);
     }
 
-    const { data: poiList } = await supabase
-      .from("poi")
-      .select("id, name")
-      .order("name");
-    setPois((poiList as POI[]) || []);
-
     const { data: pozoList } = await supabase
       .from("pozos")
-      .select("id, identifier")
+      .select("id, identifier, kind")
+      .eq("kind", "urbano")
       .order("identifier");
     setPozos((pozoList as Pozo[]) || []);
 
@@ -189,7 +181,6 @@ export default function TanqueDetalle() {
     setMode(null);
     setActionError("");
     setSelectedDestId("");
-    setDestType("poi");
     setDestCurrentTank(null);
     setCertFile(null);
     setCertPreview("");
@@ -220,18 +211,13 @@ export default function TanqueDetalle() {
   const handleAsignar = async () => {
     if (!tank || saving) return;
     if (!selectedDestId) {
-      setActionError(
-        destType === "poi" ? "Selecciona una planta." : "Selecciona un pozo."
-      );
+      setActionError("Selecciona un pozo.");
       return;
     }
     setSaving(true);
     setActionError("");
 
     const isSwap = !!destCurrentTank;
-    const destFkCol =
-      destType === "poi" ? "current_poi_id" : "current_pozo_id";
-    const eventDestField = destType === "poi" ? "poi_id" : "pozo_id";
 
     if (isSwap && destCurrentTank) {
       await supabase
@@ -242,7 +228,7 @@ export default function TanqueDetalle() {
         {
           tank_id: destCurrentTank.id,
           event_type: "cambio_salida",
-          [eventDestField]: selectedDestId,
+          pozo_id: selectedDestId,
           related_tank_id: tank.id,
         },
       ]);
@@ -252,15 +238,15 @@ export default function TanqueDetalle() {
       .from("tanks")
       .update({
         status: "asignado",
-        current_poi_id: destType === "poi" ? selectedDestId : null,
-        current_pozo_id: destType === "pozo" ? selectedDestId : null,
+        current_poi_id: null,
+        current_pozo_id: selectedDestId,
       })
       .eq("id", tank.id);
     await supabase.from("tank_events").insert([
       {
         tank_id: tank.id,
         event_type: isSwap ? "cambio_entrada" : "asignacion",
-        [eventDestField]: selectedDestId,
+        pozo_id: selectedDestId,
         related_tank_id: isSwap && destCurrentTank ? destCurrentTank.id : null,
       },
     ]);
@@ -449,7 +435,7 @@ export default function TanqueDetalle() {
                     : "bg-blue-50 text-dtm-blue hover:bg-blue-100"
                 }`}
               >
-                <MapPin className="w-4 h-4" /> Asignar a Planta o Pozo
+                <MapPin className="w-4 h-4" /> Asignar a Pozo
               </button>
             )}
             {tank.status === "asignado" && (
@@ -496,67 +482,25 @@ export default function TanqueDetalle() {
           {mode === "asignar" && (
             <div className="border-t border-gray-100 pt-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tipo de destino
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDestType("poi");
-                      setSelectedDestId("");
-                    }}
-                    className={`px-3 py-2 rounded-lg border-2 text-sm font-semibold transition ${
-                      destType === "poi"
-                        ? "border-dtm-blue bg-blue-50 text-dtm-blue"
-                        : "border-gray-200 text-gray-500"
-                    }`}
-                  >
-                    Planta (POI)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDestType("pozo");
-                      setSelectedDestId("");
-                    }}
-                    className={`px-3 py-2 rounded-lg border-2 text-sm font-semibold transition ${
-                      destType === "pozo"
-                        ? "border-dtm-blue bg-blue-50 text-dtm-blue"
-                        : "border-gray-200 text-gray-500"
-                    }`}
-                  >
-                    Pozo
-                  </button>
-                </div>
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {destType === "poi" ? "Planta destino" : "Pozo destino"}
+                  Pozo destino (solo urbanos)
                 </label>
                 <select
                   value={selectedDestId}
                   onChange={(e) => setSelectedDestId(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-dtm-blue"
                 >
-                  <option value="">
-                    Selecciona {destType === "poi" ? "una planta" : "un pozo"}
-                    ...
-                  </option>
-                  {(destType === "poi"
-                    ? pois.map((p) => ({ id: p.id, label: p.name }))
-                    : pozos.map((p) => ({ id: p.id, label: p.identifier }))
-                  ).map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.label}
+                  <option value="">Selecciona un pozo...</option>
+                  {pozos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.identifier}
                     </option>
                   ))}
                 </select>
               </div>
               {destCurrentTank && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-                  Este {destType === "poi" ? "planta" : "pozo"} ya tiene
-                  asignado el tanque{" "}
+                  Este pozo ya tiene asignado el tanque{" "}
                   <strong>{destCurrentTank.identifier}</strong>. Al continuar se
                   registrará un cambio: el tanque saliente regresará a almacén.
                 </div>
