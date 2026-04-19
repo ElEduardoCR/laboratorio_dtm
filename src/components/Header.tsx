@@ -18,9 +18,9 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-8 py-3 flex items-center justify-between">
         <Link
           href="/"
-          className="font-bold text-dtm-blue text-sm sm:text-base"
+          className="font-bold text-dtm-blue text-sm sm:text-base leading-tight"
         >
-          Laboratorio DTM
+          Dirección Técnica Municipal
         </Link>
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex items-center gap-2 text-sm text-gray-700">

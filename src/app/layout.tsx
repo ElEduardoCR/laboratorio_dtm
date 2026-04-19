@@ -35,16 +35,25 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: POLYFILL_SCRIPT }} />
       </head>
-      <body className="min-h-full flex flex-col bg-white">
-        <AuthProvider>
-          <Header />
-          <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 flex flex-col">
-            <AuthGate>{children}</AuthGate>
-          </main>
-          <footer className="bg-dtm-blue text-white w-full p-4 text-center mt-auto">
-            <p>&copy; {new Date().getFullYear()} Laboratorio DTM. Todos los derechos reservados.</p>
-          </footer>
-        </AuthProvider>
+      <body
+        className="min-h-full flex flex-col bg-white bg-no-repeat bg-center bg-fixed"
+        style={{
+          backgroundImage: "url('/logos/logo.webp')",
+          backgroundSize: "min(70vw, 700px)",
+          backgroundBlendMode: "lighten",
+        }}
+      >
+        <div className="min-h-full flex flex-col flex-1 bg-white/85">
+          <AuthProvider>
+            <Header />
+            <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 flex flex-col">
+              <AuthGate>{children}</AuthGate>
+            </main>
+            <footer className="bg-dtm-blue text-white w-full p-4 text-center mt-auto">
+              <p>&copy; {new Date().getFullYear()} Junta Municipal de Agua y Saneamiento de Delicias - Dirección Técnica Municipal. Todos los derechos reservados.</p>
+            </footer>
+          </AuthProvider>
+        </div>
       </body>
     </html>
   );
