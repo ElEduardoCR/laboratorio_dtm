@@ -94,12 +94,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      (event, newSession) => {
         setSession(newSession);
-        if (newSession?.user) {
-          await loadProfile(newSession.user.id);
-        } else {
+        if (event === "SIGNED_OUT" || !newSession?.user) {
           setProfile(null);
+          return;
+        }
+        if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+          loadProfile(newSession.user.id);
         }
       }
     );
