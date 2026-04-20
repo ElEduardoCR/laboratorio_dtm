@@ -18,6 +18,7 @@ export default function NuevoPozo() {
   const [kind, setKind] = useState<Kind>("urbano");
   const [chlorinationType, setChlorinationType] =
     useState<ChlorType>("gas_cloro");
+  const [hipocloritoKg, setHipocloritoKg] = useState("");
   const [chlorinator, setChlorinator] = useState("");
   const [isOperational, setIsOperational] = useState(true);
   const [notes, setNotes] = useState("");
@@ -60,6 +61,10 @@ export default function NuevoPozo() {
           nickname: nickname.trim() || null,
           kind,
           chlorination_type: chlorinationType,
+          hipoclorito_qty_kg:
+            chlorinationType === "hipoclorito"
+              ? parseFloat(hipocloritoKg || "0") || 0
+              : 0,
           chlorinator_system: chlorinator.trim() || null,
           is_operational: isOperational,
           notes: notes.trim() || null,
@@ -203,9 +208,35 @@ export default function NuevoPozo() {
             </div>
             <p className="text-xs text-gray-400 mt-1">
               Con tanque: se asigna un cilindro desde Tanques. Con hipoclorito:
-              se descuenta del inventario al rellenar en la revisión diaria.
+              el pozo tiene su propio contenedor con KG de reserva.
             </p>
           </div>
+
+          {chlorinationType === "hipoclorito" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Hipoclorito inicial en el pozo (KG)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={hipocloritoKg}
+                  onChange={(e) => setHipocloritoKg(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-dtm-blue"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
+                  KG
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Cantidad actual en el contenedor del pozo. Se irá actualizando
+                con los rellenos registrados en la revisión diaria.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -30,6 +30,7 @@ type Pozo = {
   identifier: string;
   kind: "urbano" | "rural" | null;
   chlorination_type: "gas_cloro" | "hipoclorito" | null;
+  hipoclorito_qty_kg: number | null;
 };
 type Point = { id: string; address: string; position: number };
 type Tank = { id: string; identifier: string };
@@ -64,7 +65,7 @@ export default function RevisionDiariaPozo() {
     setLoading(true);
     const { data: p } = await supabase
       .from("pozos")
-      .select("id, identifier, kind, chlorination_type")
+      .select("id, identifier, kind, chlorination_type, hipoclorito_qty_kg")
       .eq("id", poziId)
       .single();
     setPozo((p as Pozo) || null);
@@ -209,6 +210,10 @@ export default function RevisionDiariaPozo() {
         {pozo.chlorination_type === "hipoclorito" && (
           <HipocloritoSection
             pozoId={poziId}
+            pozoStockKg={Number(pozo.hipoclorito_qty_kg || 0)}
+            alreadyToday={reviews.some(
+              (r) => r.sampling_point_id === null
+            )}
             sku={hipoSku}
             userId={session?.user?.id || null}
             onSaved={loadData}
@@ -506,11 +511,15 @@ function TankWeightSection({
 
 function HipocloritoSection({
   pozoId,
+  pozoStockKg,
+  alreadyToday,
   sku,
   userId,
   onSaved,
 }: {
   pozoId: string;
+  pozoStockKg: number;
+  alreadyToday: boolean;
   sku: Hipoclorito | null;
   userId: string | null;
   onSaved: () => void;
@@ -518,21 +527,15 @@ function HipocloritoSection({
   const [qty, setQty] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-
-  if (!sku) {
-    return (
-      <div className="mt-6 border-t border-gray-100 pt-6">
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
-          No hay un SKU marcado como hipoclorito en inventario. Agrega o marca
-          uno en Inventario para registrar rellenos.
-        </div>
-      </div>
-    );
-  }
 
   const submit = async () => {
     setError(null);
+    if (!sku) {
+      setError(
+        "No hay un SKU marcado como hipoclorito en inventario."
+      );
+      return;
+    }
     const q = parseFloat(qty);
     if (!q || q <= 0) {
       setError("Ingresa una cantidad válida.");
@@ -540,18 +543,38 @@ function HipocloritoSection({
     }
     if (q > Number(sku.current_qty)) {
       setError(
-        `Existencia insuficiente (${sku.current_qty} kg disponibles).`
+        `Existencia insuficiente en inventario (${sku.current_qty} kg disponibles).`
       );
       return;
     }
     setSaving(true);
+    const today = getTodayMexicoCity();
     const { data: item } = await supabase
       .from("inventory_items")
       .select("price")
       .eq("id", sku.id)
       .single();
     const price = Number(item?.price || 0);
-    const ins = await supabase.from("inventory_usages").insert({
+
+    const revIns = await supabase.from("well_daily_reviews").insert({
+      pozo_id: pozoId,
+      review_date: today,
+      sampling_point_id: null,
+      hipoclorito_qty_kg: q,
+      sample_time: new Date().toISOString(),
+      signed_by: userId,
+    });
+    if (revIns.error) {
+      setError(
+        revIns.error.code === "23505"
+          ? "Ya se registró el relleno de hipoclorito de hoy."
+          : revIns.error.message
+      );
+      setSaving(false);
+      return;
+    }
+
+    await supabase.from("inventory_usages").insert({
       item_id: sku.id,
       qty: q,
       unit_price_snapshot: price,
@@ -560,18 +583,16 @@ function HipocloritoSection({
       pozo_id: pozoId,
       description: "Relleno de hipoclorito en revisión diaria",
     });
-    if (ins.error) {
-      setError(ins.error.message);
-      setSaving(false);
-      return;
-    }
     await supabase
       .from("inventory_items")
       .update({ current_qty: Number(sku.current_qty) - q })
       .eq("id", sku.id);
-    void userId;
+    await supabase
+      .from("pozos")
+      .update({ hipoclorito_qty_kg: Number(pozoStockKg) + q })
+      .eq("id", pozoId);
+
     setSaving(false);
-    setDone(true);
     onSaved();
   };
 
@@ -582,12 +603,32 @@ function HipocloritoSection({
         Relleno de hipoclorito
       </h3>
       <p className="text-xs text-gray-500 mb-3">
-        Existencia actual: <span className="font-semibold">{sku.current_qty} kg</span>
+        En el pozo:{" "}
+        <span className="font-semibold text-gray-800">
+          {Number(pozoStockKg).toLocaleString("es-MX", {
+            maximumFractionDigits: 2,
+          })}{" "}
+          kg
+        </span>
+        {sku && (
+          <>
+            {" · "}
+            Inventario disponible:{" "}
+            <span className="font-semibold">{sku.current_qty} kg</span>
+          </>
+        )}
       </p>
-      {done ? (
+
+      {alreadyToday ? (
         <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
-          Relleno registrado y descontado del inventario.
+          Ya se registró el relleno de hipoclorito de hoy. El siguiente estará
+          disponible mañana a las 00:01 hrs (hora CDMX).
         </p>
+      ) : !sku ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-800 text-sm">
+          No hay un SKU marcado como hipoclorito en inventario. Agrega o marca
+          uno en Inventario para registrar rellenos.
+        </div>
       ) : (
         <>
           <div className="flex gap-2">

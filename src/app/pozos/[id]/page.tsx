@@ -27,6 +27,7 @@ type Pozo = {
   nickname: string | null;
   kind: "urbano" | "rural" | null;
   chlorination_type: "gas_cloro" | "hipoclorito" | null;
+  hipoclorito_qty_kg: number | null;
   is_operational: boolean;
   chlorinator_system: string | null;
   notes: string | null;
@@ -87,11 +88,6 @@ export default function PozoDetalle() {
   const [points, setPoints] = useState<SamplingPoint[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [tank, setTank] = useState<Tank | null>(null);
-  const [hipoStock, setHipoStock] = useState<{
-    id: string;
-    sku: string;
-    current_qty: number;
-  } | null>(null);
   const [openEvents, setOpenEvents] = useState<MEvent[]>([]);
   const [usages, setUsages] = useState<Usage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -161,22 +157,8 @@ export default function PozoDetalle() {
         .eq("status", "asignado")
         .maybeSingle();
       setTank(t as Tank | null);
-      setHipoStock(null);
-    } else if ((p as Pozo).chlorination_type === "hipoclorito") {
-      const { data: h } = await supabase
-        .from("inventory_items")
-        .select("id, sku, current_qty")
-        .eq("is_hipoclorito", true)
-        .maybeSingle();
-      setHipoStock(
-        h
-          ? { id: h.id, sku: h.sku, current_qty: Number(h.current_qty) }
-          : null
-      );
-      setTank(null);
     } else {
       setTank(null);
-      setHipoStock(null);
     }
 
     const { data: events } = await supabase
@@ -369,32 +351,18 @@ export default function PozoDetalle() {
             <Cylinder className="w-5 h-5 text-dtm-blue" />
           </div>
           {pozo.chlorination_type === "hipoclorito" ? (
-            hipoStock ? (
-              <Link
-                href="/inventario"
-                className="block hover:opacity-80"
-              >
-                <p className="text-2xl font-bold text-gray-800 mb-1">
-                  {hipoStock.current_qty} KG
-                </p>
-                <p className="text-xs text-gray-500">
-                  SKU <span className="font-mono">{hipoStock.sku}</span> ·
-                  inventario compartido
-                </p>
-              </Link>
-            ) : (
-              <div>
-                <p className="text-gray-400 text-sm mb-2">
-                  Sin SKU de hipoclorito en inventario.
-                </p>
-                <Link
-                  href="/inventario/nuevo"
-                  className="text-xs text-dtm-blue hover:underline"
-                >
-                  Dar de alta SKU →
-                </Link>
-              </div>
-            )
+            <div>
+              <p className="text-2xl font-bold text-gray-800 mb-1">
+                {Number(pozo.hipoclorito_qty_kg || 0).toLocaleString("es-MX", {
+                  maximumFractionDigits: 2,
+                })}{" "}
+                KG
+              </p>
+              <p className="text-xs text-gray-500">
+                Reserva actual en el contenedor del pozo. Se actualiza con
+                cada relleno registrado en la revisión diaria.
+              </p>
+            </div>
           ) : tank ? (
             <Link
               href={`/tanques/${tank.id}`}
