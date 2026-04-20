@@ -95,6 +95,7 @@ export default function POIDetail() {
   const [usages, setUsages] = useState<Usage[]>([]);
   const canDaily = usePermission("reviews.daily");
   const canWeekly = usePermission("reviews.weekly");
+  const canViewCosts = usePermission("costs.view");
 
   useEffect(() => {
     if (!id) return;
@@ -459,6 +460,7 @@ export default function POIDetail() {
       )}
 
       {/* Cuenta de gasto */}
+      {canViewCosts && (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -519,6 +521,7 @@ export default function POIDetail() {
           </div>
         )}
       </div>
+      )}
 
       {/* Historial de Revisiones */}
       <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-100">

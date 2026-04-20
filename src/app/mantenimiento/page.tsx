@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 import {
   ArrowLeft,
   Wrench,
@@ -11,6 +12,7 @@ import {
   Activity,
   CheckCircle2,
   Clock,
+  Plus,
 } from "lucide-react";
 
 type MEvent = {
@@ -58,6 +60,8 @@ const STATUS_LABELS: Record<
 };
 
 export default function MantenimientoList() {
+  const { profile } = useAuth();
+  const canManage = !!profile?.permissions.maintenance?.assign;
   const [events, setEvents] = useState<MEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("abierto");
@@ -115,14 +119,25 @@ export default function MantenimientoList() {
         Regresar al Panel
       </Link>
 
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-          <Wrench className="w-7 h-7 text-amber-600" />
-          Eventos de Mantenimiento
-        </h1>
-        <p className="text-gray-500 mt-1">
-          Incidencias generadas en revisiones de pozos y plantas.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
+            <Wrench className="w-7 h-7 text-amber-600" />
+            Eventos de Mantenimiento
+          </h1>
+          <p className="text-gray-500 mt-1">
+            Incidencias generadas en revisiones de pozos y plantas.
+          </p>
+        </div>
+        {canManage && (
+          <Link
+            href="/mantenimiento/nuevo"
+            className="inline-flex items-center gap-1 bg-dtm-blue text-white px-4 py-2 rounded-xl font-semibold text-sm hover:bg-blue-800 shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo Evento
+          </Link>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2 mb-6">

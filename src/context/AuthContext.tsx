@@ -30,6 +30,7 @@ export type Permissions = {
   inventory: { in?: boolean; out?: boolean };
   tanks: { in?: boolean; out?: boolean };
   maintenance: { assign?: boolean };
+  costs: { view?: boolean };
 };
 
 export type Profile = {
@@ -57,6 +58,7 @@ function emptyPerms(): Permissions {
     inventory: {},
     tanks: {},
     maintenance: {},
+    costs: {},
   };
 }
 
@@ -147,7 +149,9 @@ export type PermissionKey =
   | `reviews.${keyof Permissions["reviews"]}`
   | `create.${keyof Permissions["create"]}`
   | `inventory.${keyof Permissions["inventory"]}`
-  | `tanks.${keyof Permissions["tanks"]}`;
+  | `tanks.${keyof Permissions["tanks"]}`
+  | `maintenance.${keyof Permissions["maintenance"]}`
+  | `costs.${keyof Permissions["costs"]}`;
 
 export function hasPermission(
   perms: Permissions | null | undefined,

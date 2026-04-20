@@ -32,6 +32,8 @@ type MEvent = {
   closed_by: string | null;
   created_at: string;
   resolved_at: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
   pozo?: { identifier: string } | null;
   poi?: { name: string } | null;
 };
@@ -103,6 +105,7 @@ export default function MantenimientoDetalle() {
   const canAssign = usePermission("inventory.out");
   const canManage = !!profile?.permissions.maintenance?.assign;
   const canOut = canAssign;
+  const canViewCosts = usePermission("costs.view");
 
   const [event, setEvent] = useState<MEvent | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -428,6 +431,22 @@ export default function MantenimientoDetalle() {
               {event.resolved_at &&
                 ` · Resuelto: ${new Date(event.resolved_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City", dateStyle: "medium", timeStyle: "short" })}`}
             </p>
+            {(event.scheduled_start || event.scheduled_end) && (
+              <p className="text-xs text-gray-500 mt-1">
+                Programado:{" "}
+                {event.scheduled_start
+                  ? new Date(event.scheduled_start).toLocaleDateString("es-MX", {
+                      timeZone: "America/Mexico_City",
+                    })
+                  : "—"}
+                {" → "}
+                {event.scheduled_end
+                  ? new Date(event.scheduled_end).toLocaleDateString("es-MX", {
+                      timeZone: "America/Mexico_City",
+                    })
+                  : "—"}
+              </p>
+            )}
           </div>
         </div>
 
@@ -565,12 +584,14 @@ export default function MantenimientoDetalle() {
             <Box className="w-5 h-5 text-dtm-blue" />
             Material utilizado
           </h2>
-          <span className="text-sm text-gray-600">
-            Total gastado:{" "}
-            <span className="font-bold text-gray-800">
-              ${totalSpent.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+          {canViewCosts && (
+            <span className="text-sm text-gray-600">
+              Total gastado:{" "}
+              <span className="font-bold text-gray-800">
+                ${totalSpent.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </span>
             </span>
-          </span>
+          )}
         </div>
 
         {event.status !== "cerrado" && canOut && (
@@ -636,9 +657,11 @@ export default function MantenimientoDetalle() {
                 <div>
                   <p className="font-semibold text-gray-800">
                     {u.item?.sku} · {u.qty} {u.item?.unit}
-                    <span className="font-normal text-gray-500 ml-2">
-                      = ${Number(u.total_cost).toFixed(2)}
-                    </span>
+                    {canViewCosts && (
+                      <span className="font-normal text-gray-500 ml-2">
+                        = ${Number(u.total_cost).toFixed(2)}
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs text-gray-500">
                     {u.item?.description}

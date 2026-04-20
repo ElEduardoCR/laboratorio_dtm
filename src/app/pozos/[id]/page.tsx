@@ -93,6 +93,7 @@ export default function PozoDetalle() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const canDaily = usePermission("reviews.daily");
+  const canViewCosts = usePermission("costs.view");
 
   useEffect(() => {
     if (id) load();
@@ -426,6 +427,7 @@ export default function PozoDetalle() {
       </div>
 
       {/* Cuenta de gasto */}
+      {canViewCosts && (
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -486,6 +488,7 @@ export default function PozoDetalle() {
           </div>
         )}
       </div>
+      )}
 
       {/* Historial */}
       <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-100">
