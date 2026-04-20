@@ -26,6 +26,7 @@ type Pozo = {
   well_number: string | null;
   nickname: string | null;
   kind: "urbano" | "rural" | null;
+  chlorination_type: "gas_cloro" | "hipoclorito" | null;
   is_operational: boolean;
   chlorinator_system: string | null;
   notes: string | null;
@@ -86,6 +87,11 @@ export default function PozoDetalle() {
   const [points, setPoints] = useState<SamplingPoint[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [tank, setTank] = useState<Tank | null>(null);
+  const [hipoStock, setHipoStock] = useState<{
+    id: string;
+    sku: string;
+    current_qty: number;
+  } | null>(null);
   const [openEvents, setOpenEvents] = useState<MEvent[]>([]);
   const [usages, setUsages] = useState<Usage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,13 +153,31 @@ export default function PozoDetalle() {
     }
     setReviews(rRows);
 
-    const { data: t } = await supabase
-      .from("tanks")
-      .select("id, identifier, current_weight_kg, initial_weight_kg")
-      .eq("current_pozo_id", id)
-      .eq("status", "asignado")
-      .maybeSingle();
-    setTank(t as Tank | null);
+    if ((p as Pozo).chlorination_type === "gas_cloro") {
+      const { data: t } = await supabase
+        .from("tanks")
+        .select("id, identifier, current_weight_kg, initial_weight_kg")
+        .eq("current_pozo_id", id)
+        .eq("status", "asignado")
+        .maybeSingle();
+      setTank(t as Tank | null);
+      setHipoStock(null);
+    } else if ((p as Pozo).chlorination_type === "hipoclorito") {
+      const { data: h } = await supabase
+        .from("inventory_items")
+        .select("id, sku, current_qty")
+        .eq("is_hipoclorito", true)
+        .maybeSingle();
+      setHipoStock(
+        h
+          ? { id: h.id, sku: h.sku, current_qty: Number(h.current_qty) }
+          : null
+      );
+      setTank(null);
+    } else {
+      setTank(null);
+      setHipoStock(null);
+    }
 
     const { data: events } = await supabase
       .from("maintenance_events")
@@ -337,10 +361,41 @@ export default function PozoDetalle() {
 
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-700">Tanque Asignado</h3>
+            <h3 className="font-semibold text-gray-700">
+              {pozo.chlorination_type === "hipoclorito"
+                ? "Hipoclorito Disponible"
+                : "Tanque Asignado"}
+            </h3>
             <Cylinder className="w-5 h-5 text-dtm-blue" />
           </div>
-          {tank ? (
+          {pozo.chlorination_type === "hipoclorito" ? (
+            hipoStock ? (
+              <Link
+                href="/inventario"
+                className="block hover:opacity-80"
+              >
+                <p className="text-2xl font-bold text-gray-800 mb-1">
+                  {hipoStock.current_qty} KG
+                </p>
+                <p className="text-xs text-gray-500">
+                  SKU <span className="font-mono">{hipoStock.sku}</span> ·
+                  inventario compartido
+                </p>
+              </Link>
+            ) : (
+              <div>
+                <p className="text-gray-400 text-sm mb-2">
+                  Sin SKU de hipoclorito en inventario.
+                </p>
+                <Link
+                  href="/inventario/nuevo"
+                  className="text-xs text-dtm-blue hover:underline"
+                >
+                  Dar de alta SKU →
+                </Link>
+              </div>
+            )
+          ) : tank ? (
             <Link
               href={`/tanques/${tank.id}`}
               className="block hover:opacity-80"

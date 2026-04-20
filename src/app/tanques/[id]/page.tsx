@@ -161,7 +161,7 @@ export default function TanqueDetalle() {
     const { data: pozoList } = await supabase
       .from("pozos")
       .select("id, identifier, kind")
-      .eq("kind", "urbano")
+      .eq("chlorination_type", "gas_cloro")
       .order("identifier");
     setPozos((pozoList as Pozo[]) || []);
 
@@ -483,7 +483,7 @@ export default function TanqueDetalle() {
             <div className="border-t border-gray-100 pt-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pozo destino (solo urbanos)
+                  Pozo destino (solo con tanque gas-cloro)
                 </label>
                 <select
                   value={selectedDestId}

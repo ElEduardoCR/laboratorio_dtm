@@ -7,6 +7,7 @@ import { ArrowLeft, Droplet, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/utils/supabase/client";
 
 type Kind = "urbano" | "rural";
+type ChlorType = "gas_cloro" | "hipoclorito";
 
 export default function NuevoPozo() {
   const router = useRouter();
@@ -15,6 +16,8 @@ export default function NuevoPozo() {
   const [wellNumber, setWellNumber] = useState("");
   const [nickname, setNickname] = useState("");
   const [kind, setKind] = useState<Kind>("urbano");
+  const [chlorinationType, setChlorinationType] =
+    useState<ChlorType>("gas_cloro");
   const [chlorinator, setChlorinator] = useState("");
   const [isOperational, setIsOperational] = useState(true);
   const [notes, setNotes] = useState("");
@@ -56,6 +59,7 @@ export default function NuevoPozo() {
           well_number: wellNumber.trim(),
           nickname: nickname.trim() || null,
           kind,
+          chlorination_type: chlorinationType,
           chlorinator_system: chlorinator.trim() || null,
           is_operational: isOperational,
           notes: notes.trim() || null,
@@ -164,9 +168,43 @@ export default function NuevoPozo() {
                     : "border-gray-200 text-gray-500 hover:border-gray-300"
                 }`}
               >
-                🌾 Rural (hipoclorito)
+                🌾 Rural
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Sistema de cloración <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setChlorinationType("gas_cloro")}
+                className={`px-4 py-3 rounded-xl border-2 font-semibold transition ${
+                  chlorinationType === "gas_cloro"
+                    ? "border-sky-500 bg-sky-50 text-sky-700"
+                    : "border-gray-200 text-gray-500 hover:border-gray-300"
+                }`}
+              >
+                🛢️ Tanque gas-cloro
+              </button>
+              <button
+                type="button"
+                onClick={() => setChlorinationType("hipoclorito")}
+                className={`px-4 py-3 rounded-xl border-2 font-semibold transition ${
+                  chlorinationType === "hipoclorito"
+                    ? "border-amber-500 bg-amber-50 text-amber-700"
+                    : "border-gray-200 text-gray-500 hover:border-gray-300"
+                }`}
+              >
+                🧴 Hipoclorito
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Con tanque: se asigna un cilindro desde Tanques. Con hipoclorito:
+              se descuenta del inventario al rellenar en la revisión diaria.
+            </p>
           </div>
 
           <div>

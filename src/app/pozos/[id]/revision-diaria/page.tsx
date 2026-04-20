@@ -29,6 +29,7 @@ type Pozo = {
   id: string;
   identifier: string;
   kind: "urbano" | "rural" | null;
+  chlorination_type: "gas_cloro" | "hipoclorito" | null;
 };
 type Point = { id: string; address: string; position: number };
 type Tank = { id: string; identifier: string };
@@ -63,7 +64,7 @@ export default function RevisionDiariaPozo() {
     setLoading(true);
     const { data: p } = await supabase
       .from("pozos")
-      .select("id, identifier, kind")
+      .select("id, identifier, kind, chlorination_type")
       .eq("id", poziId)
       .single();
     setPozo((p as Pozo) || null);
@@ -98,7 +99,7 @@ export default function RevisionDiariaPozo() {
       setSigners(map);
     }
 
-    if (p?.kind === "urbano") {
+    if (p?.chlorination_type === "gas_cloro") {
       const { data: t } = await supabase
         .from("tanks")
         .select("id, identifier")
@@ -108,7 +109,7 @@ export default function RevisionDiariaPozo() {
       setAssignedTank((t as Tank) || null);
     }
 
-    if (p?.kind === "rural") {
+    if (p?.chlorination_type === "hipoclorito") {
       const { data: h } = await supabase
         .from("inventory_items")
         .select("id, current_qty")
@@ -148,12 +149,15 @@ export default function RevisionDiariaPozo() {
           </h1>
           <span
             className={`text-xs font-bold uppercase px-2 py-1 rounded-full ${
-              pozo.kind === "rural"
+              pozo.chlorination_type === "hipoclorito"
                 ? "bg-amber-100 text-amber-700"
                 : "bg-sky-100 text-sky-700"
             }`}
           >
-            {pozo.kind === "rural" ? "Rural · hipoclorito" : "Urbano · gas-cloro"}
+            {pozo.chlorination_type === "hipoclorito"
+              ? "Hipoclorito"
+              : "Tanque gas-cloro"}
+            {pozo.kind && ` · ${pozo.kind}`}
           </span>
         </div>
         <p className="text-gray-500 mb-6">
@@ -193,7 +197,7 @@ export default function RevisionDiariaPozo() {
           </div>
         )}
 
-        {pozo.kind === "urbano" && assignedTank && (
+        {pozo.chlorination_type === "gas_cloro" && assignedTank && (
           <TankWeightSection
             pozoId={poziId}
             tank={assignedTank}
@@ -202,7 +206,7 @@ export default function RevisionDiariaPozo() {
           />
         )}
 
-        {pozo.kind === "rural" && (
+        {pozo.chlorination_type === "hipoclorito" && (
           <HipocloritoSection
             pozoId={poziId}
             sku={hipoSku}
