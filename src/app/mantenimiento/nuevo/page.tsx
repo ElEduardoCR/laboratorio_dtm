@@ -60,6 +60,7 @@ export default function NuevoMantenimiento() {
   const [pozoId, setPozoId] = useState("");
   const [poiId, setPoiId] = useState("");
   const [eventType, setEventType] = useState<EventType>("clorador_danado");
+  const [customTitle, setCustomTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [scheduledStart, setScheduledStart] = useState("");
@@ -132,6 +133,10 @@ export default function NuevoMantenimiento() {
       setError("Asigna un técnico responsable.");
       return;
     }
+    if (eventType === "otro" && !customTitle.trim()) {
+      setError("Escribe un nombre para el evento.");
+      return;
+    }
     if (!description.trim()) {
       setError("Describe el trabajo a realizar.");
       return;
@@ -172,6 +177,7 @@ export default function NuevoMantenimiento() {
         pozo_id: sourceType === "pozo" ? pozoId : null,
         poi_id: sourceType === "poi" ? poiId : null,
         event_type: eventType,
+        custom_title: eventType === "otro" ? customTitle.trim() : null,
         description: description.trim(),
         status: "en_proceso",
         assigned_to: assignedTo,
@@ -354,6 +360,21 @@ export default function NuevoMantenimiento() {
               ))}
             </select>
           </div>
+
+          {eventType === "otro" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nombre del evento <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={customTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
+                placeholder="Ej. Cambio de empaques del clorador"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

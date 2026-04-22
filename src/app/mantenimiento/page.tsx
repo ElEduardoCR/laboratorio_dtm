@@ -21,6 +21,7 @@ type MEvent = {
   pozo_id: string | null;
   poi_id: string | null;
   event_type: string;
+  custom_title: string | null;
   description: string | null;
   status: "abierto" | "en_proceso" | "cerrado";
   created_at: string;
@@ -220,7 +221,9 @@ export default function MantenimientoList() {
                       href={`/mantenimiento/${e.id}`}
                       className="font-semibold text-gray-800 hover:text-dtm-blue hover:underline block"
                     >
-                      {EVENT_LABELS[e.event_type] || e.event_type}
+                      {e.event_type === "otro" && e.custom_title
+                        ? e.custom_title
+                        : EVENT_LABELS[e.event_type] || e.event_type}
                     </Link>
                     {e.description && (
                       <p className="text-sm text-gray-600 mt-1">

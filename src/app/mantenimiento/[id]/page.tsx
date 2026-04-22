@@ -26,7 +26,10 @@ type MEvent = {
   pozo_id: string | null;
   poi_id: string | null;
   event_type: string;
+  custom_title: string | null;
   description: string | null;
+  resolution_notes: string | null;
+  resolution_photos: string[] | null;
   status: "abierto" | "en_proceso" | "cerrado";
   assigned_to: string | null;
   closed_by: string | null;
@@ -122,6 +125,9 @@ export default function MantenimientoDetalle() {
   const [reopenNotes, setReopenNotes] = useState("");
   const [showReopen, setShowReopen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showClose, setShowClose] = useState(false);
+  const [closeNotes, setCloseNotes] = useState("");
+  const [closeFiles, setCloseFiles] = useState<File[]>([]);
 
   const [itemId, setItemId] = useState("");
   const [qty, setQty] = useState("");
@@ -225,17 +231,53 @@ export default function MantenimientoDetalle() {
       setActionError("Solo el técnico asignado puede cerrar este evento.");
       return;
     }
+    if (!closeNotes.trim()) {
+      setActionError("Describe brevemente el trabajo realizado.");
+      return;
+    }
+    if (closeFiles.length === 0) {
+      setActionError("Adjunta al menos una foto de evidencia.");
+      return;
+    }
     setBusy(true);
     setActionError(null);
+
+    const urls: string[] = [];
+    for (let idx = 0; idx < closeFiles.length; idx++) {
+      const file = closeFiles[idx];
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `maintenance/${event.id}/${Date.now()}-${idx}.${ext}`;
+      const up = await supabase.storage
+        .from("review-photos")
+        .upload(path, file, {
+          upsert: false,
+          contentType: file.type || "image/jpeg",
+        });
+      if (up.error) {
+        setActionError(`No se pudo subir la foto ${idx + 1}: ${up.error.message}`);
+        setBusy(false);
+        return;
+      }
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("review-photos").getPublicUrl(path);
+      urls.push(publicUrl);
+    }
+
     await supabase
       .from("maintenance_events")
       .update({
         status: "cerrado",
         closed_by: session.user.id,
         resolved_at: new Date().toISOString(),
+        resolution_notes: closeNotes.trim(),
+        resolution_photos: urls,
       })
       .eq("id", event.id);
-    await logHistory("cerrar", null, null);
+    await logHistory("cerrar", null, closeNotes.trim());
+    setCloseNotes("");
+    setCloseFiles([]);
+    setShowClose(false);
     setBusy(false);
     load();
   };
@@ -397,7 +439,9 @@ export default function MantenimientoDetalle() {
             </div>
             <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
               <Wrench className="w-6 h-6 text-amber-600" />
-              {EVENT_LABELS[event.event_type] || event.event_type}
+              {event.event_type === "otro" && event.custom_title
+                ? event.custom_title
+                : EVENT_LABELS[event.event_type] || event.event_type}
             </h1>
             {event.description && (
               <p className="text-gray-600 mt-2">{event.description}</p>
@@ -468,7 +512,12 @@ export default function MantenimientoDetalle() {
           {canCloseNow && (
             <button
               disabled={busy}
-              onClick={handleClose}
+              onClick={() => {
+                setShowClose((v) => !v);
+                setShowAssign(false);
+                setShowReopen(false);
+                setActionError(null);
+              }}
               className="px-3 py-1.5 text-xs font-semibold bg-green-50 text-green-700 hover:bg-green-100 rounded-lg disabled:opacity-50 inline-flex items-center gap-1"
             >
               <CheckCircle2 className="w-3 h-3" />
@@ -533,6 +582,58 @@ export default function MantenimientoDetalle() {
                 className="flex-1 px-3 py-2 bg-dtm-blue text-white rounded-xl text-sm font-semibold hover:bg-blue-800 disabled:opacity-50"
               >
                 {busy ? "Guardando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showClose && canCloseNow && (
+          <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+            <label className="block text-sm font-medium text-gray-700">
+              Trabajo realizado <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              rows={3}
+              value={closeNotes}
+              onChange={(e) => setCloseNotes(e.target.value)}
+              placeholder="Describe brevemente lo que se hizo..."
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+            />
+            <label className="block text-sm font-medium text-gray-700">
+              Evidencia fotográfica <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              capture="environment"
+              onChange={(e) =>
+                setCloseFiles(Array.from(e.target.files || []))
+              }
+              className="w-full text-sm"
+            />
+            {closeFiles.length > 0 && (
+              <p className="text-xs text-gray-500">
+                {closeFiles.length} archivo(s) seleccionado(s).
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowClose(false);
+                  setCloseNotes("");
+                  setCloseFiles([]);
+                }}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleClose}
+                disabled={busy}
+                className="flex-1 px-3 py-2 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+              >
+                {busy ? "Cerrando..." : "Confirmar Cierre"}
               </button>
             </div>
           </div>
@@ -691,6 +792,41 @@ export default function MantenimientoDetalle() {
           </div>
         )}
       </div>
+
+      {event.status === "cerrado" &&
+        (event.resolution_notes ||
+          (event.resolution_photos && event.resolution_photos.length > 0)) && (
+          <div className="bg-white rounded-2xl p-6 border border-gray-100 mb-6">
+            <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
+              <CheckCircle2 className="w-5 h-5 text-green-600" />
+              Trabajo realizado
+            </h2>
+            {event.resolution_notes && (
+              <p className="text-sm text-gray-700 whitespace-pre-wrap mb-4">
+                {event.resolution_notes}
+              </p>
+            )}
+            {event.resolution_photos && event.resolution_photos.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {event.resolution_photos.map((url, i) => (
+                  <a
+                    key={i}
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block"
+                  >
+                    <img
+                      src={url}
+                      alt={`Evidencia ${i + 1}`}
+                      className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
       <div className="bg-white rounded-2xl p-6 border border-gray-100">
         <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
