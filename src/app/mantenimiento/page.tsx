@@ -261,7 +261,7 @@ export default function MantenimientoList() {
                         Cerrar
                       </button>
                     )}
-                    {e.status === "cerrado" && (
+                    {e.status === "cerrado" && canManage && (
                       <button
                         disabled={updating === e.id}
                         onClick={() => updateStatus(e.id, "abierto")}
