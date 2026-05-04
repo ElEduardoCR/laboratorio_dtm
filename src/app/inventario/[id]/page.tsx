@@ -26,8 +26,8 @@ type Item = {
   supplier_qty: number | null;
   pack_size: number | null;
   pack_unit: string | null;
-  price: number;
-  current_qty: number;
+  price: number | null;
+  current_qty: number | null;
 };
 
 type Entry = {
@@ -161,8 +161,8 @@ export default function InventarioDetalle() {
         supplier_qty: it.supplier_qty?.toString() || "",
         pack_size: it.pack_size?.toString() || "",
         pack_unit: it.pack_unit || "",
-        price: it.price.toString(),
-        current_qty: it.current_qty.toString(),
+        price: it.price === null || it.price === undefined ? "" : it.price.toString(),
+        current_qty: it.current_qty === null || it.current_qty === undefined ? "" : it.current_qty.toString(),
         reason: "",
       });
     }
@@ -178,21 +178,21 @@ export default function InventarioDetalle() {
     if (!item || busy) return;
     setFormError("");
 
-    if (!form.sku.trim() || !form.description.trim() || !form.unit.trim()) {
-      setFormError("SKU, descripción y unidad son obligatorios.");
+    if (!form.sku.trim() || !form.description.trim()) {
+      setFormError("SKU y descripción son obligatorios.");
       return;
     }
     if (!form.reason.trim()) {
       setFormError("Indica el motivo del ajuste.");
       return;
     }
-    const priceNum = parseFloat(form.price || "0");
-    const qtyNum = parseFloat(form.current_qty || "0");
+    const priceNum = form.price.trim() ? parseFloat(form.price) : null;
+    const qtyNum = form.current_qty.trim() ? parseFloat(form.current_qty) : 0;
     const supQtyNum = form.supplier_qty
       ? parseFloat(form.supplier_qty)
       : null;
     const packSizeNum = form.pack_size ? parseFloat(form.pack_size) : null;
-    if (isNaN(priceNum) || priceNum < 0) {
+    if (priceNum !== null && (isNaN(priceNum) || priceNum < 0)) {
       setFormError("Precio inválido.");
       return;
     }
@@ -204,7 +204,7 @@ export default function InventarioDetalle() {
     const next = {
       sku: form.sku.trim(),
       description: form.description.trim(),
-      unit: form.unit.trim(),
+      unit: form.unit.trim() || null,
       supplier: form.supplier.trim() || null,
       supplier_qty: supQtyNum,
       pack_size: packSizeNum,
@@ -220,8 +220,8 @@ export default function InventarioDetalle() {
       supplier_qty: item.supplier_qty,
       pack_size: item.pack_size,
       pack_unit: item.pack_unit,
-      price: Number(item.price),
-      current_qty: Number(item.current_qty),
+      price: item.price === null || item.price === undefined ? null : Number(item.price),
+      current_qty: Number(item.current_qty || 0),
     };
 
     const changes: AdjChange[] = [];
@@ -516,10 +516,17 @@ export default function InventarioDetalle() {
           </form>
         )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Metric label="Existencia" value={`${item.current_qty} ${item.unit}`} />
+          <Metric
+            label="Existencia"
+            value={`${item.current_qty ?? 0} ${item.unit || ""}`.trim()}
+          />
           <Metric
             label="Precio unitario"
-            value={`$${Number(item.price).toFixed(2)}`}
+            value={
+              item.price === null || item.price === undefined
+                ? "—"
+                : `$${Number(item.price).toFixed(2)}`
+            }
           />
           <Metric label="Entradas" value={`${totalIn} ${item.unit}`} />
           <Metric

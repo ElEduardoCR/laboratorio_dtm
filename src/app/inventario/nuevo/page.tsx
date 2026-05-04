@@ -12,7 +12,7 @@ export default function NuevoItem() {
   const router = useRouter();
   const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
-  const [unit, setUnit] = useState("pza");
+  const [unit, setUnit] = useState("");
   const [supplier, setSupplier] = useState("");
   const [supplierQty, setSupplierQty] = useState("");
   const [packSize, setPackSize] = useState("");
@@ -25,20 +25,20 @@ export default function NuevoItem() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!sku.trim() || !description.trim() || !unit || !price) {
-      setError("SKU, descripción, unidad y precio son requeridos.");
+    if (!sku.trim() || !description.trim()) {
+      setError("SKU y descripción son requeridos.");
       return;
     }
     setSaving(true);
     const { error } = await supabase.from("inventory_items").insert({
       sku: sku.trim(),
       description: description.trim(),
-      unit,
+      unit: unit || null,
       supplier: supplier.trim() || null,
       supplier_qty: supplierQty ? Number(supplierQty) : null,
       pack_size: packSize ? Number(packSize) : null,
       pack_unit: packUnit.trim() || null,
-      price: Number(price),
+      price: price ? Number(price) : null,
       current_qty: 0,
       is_hipoclorito: isHipoclorito,
     });
@@ -100,13 +100,14 @@ export default function NuevoItem() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Unidad <span className="text-red-500">*</span>
+              Unidad
             </label>
             <select
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2 bg-white"
             >
+              <option value="">— Sin definir —</option>
               {UNITS.map((u) => (
                 <option key={u} value={u}>
                   {u}
@@ -116,7 +117,7 @@ export default function NuevoItem() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Precio unitario <span className="text-red-500">*</span>
+              Precio unitario
             </label>
             <input
               type="number"
@@ -125,7 +126,6 @@ export default function NuevoItem() {
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2"
-              required
             />
           </div>
         </div>
