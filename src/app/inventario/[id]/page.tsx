@@ -24,6 +24,8 @@ type Item = {
   unit: string;
   supplier: string | null;
   supplier_qty: number | null;
+  pack_size: number | null;
+  pack_unit: string | null;
   price: number;
   current_qty: number;
 };
@@ -67,6 +69,8 @@ const FIELD_LABELS: Record<string, string> = {
   unit: "Unidad",
   supplier: "Proveedor",
   supplier_qty: "Cantidad por pedido",
+  pack_size: "Contenido por paquete",
+  pack_unit: "Unidad del contenido",
   price: "Precio unitario",
   current_qty: "Existencia",
 };
@@ -92,6 +96,8 @@ export default function InventarioDetalle() {
     unit: "",
     supplier: "",
     supplier_qty: "",
+    pack_size: "",
+    pack_unit: "",
     price: "",
     current_qty: "",
     reason: "",
@@ -153,6 +159,8 @@ export default function InventarioDetalle() {
         unit: it.unit,
         supplier: it.supplier || "",
         supplier_qty: it.supplier_qty?.toString() || "",
+        pack_size: it.pack_size?.toString() || "",
+        pack_unit: it.pack_unit || "",
         price: it.price.toString(),
         current_qty: it.current_qty.toString(),
         reason: "",
@@ -183,6 +191,7 @@ export default function InventarioDetalle() {
     const supQtyNum = form.supplier_qty
       ? parseFloat(form.supplier_qty)
       : null;
+    const packSizeNum = form.pack_size ? parseFloat(form.pack_size) : null;
     if (isNaN(priceNum) || priceNum < 0) {
       setFormError("Precio inválido.");
       return;
@@ -198,6 +207,8 @@ export default function InventarioDetalle() {
       unit: form.unit.trim(),
       supplier: form.supplier.trim() || null,
       supplier_qty: supQtyNum,
+      pack_size: packSizeNum,
+      pack_unit: form.pack_unit.trim() || null,
       price: priceNum,
       current_qty: qtyNum,
     };
@@ -207,6 +218,8 @@ export default function InventarioDetalle() {
       unit: item.unit,
       supplier: item.supplier,
       supplier_qty: item.supplier_qty,
+      pack_size: item.pack_size,
+      pack_unit: item.pack_unit,
       price: Number(item.price),
       current_qty: Number(item.current_qty),
     };
@@ -249,7 +262,11 @@ export default function InventarioDetalle() {
   const formatVal = (field: string, v: unknown) => {
     if (v === null || v === undefined || v === "") return "—";
     if (field === "price") return `$${Number(v).toFixed(2)}`;
-    if (field === "current_qty" || field === "supplier_qty") {
+    if (
+      field === "current_qty" ||
+      field === "supplier_qty" ||
+      field === "pack_size"
+    ) {
       return `${v}`;
     }
     return String(v);
@@ -302,6 +319,12 @@ export default function InventarioDetalle() {
                 {item.supplier_qty
                   ? ` (${item.supplier_qty} ${item.unit} por pedido)`
                   : ""}
+              </p>
+            )}
+            {item.pack_size && (
+              <p className="text-sm text-gray-500">
+                Contenido por paquete: {item.pack_size}
+                {item.pack_unit ? ` ${item.pack_unit}` : ""}
               </p>
             )}
           </div>
@@ -395,6 +418,36 @@ export default function InventarioDetalle() {
                   onChange={(e) =>
                     setForm({ ...form, supplier_qty: e.target.value })
                   }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Contenido por paquete
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={form.pack_size}
+                  onChange={(e) =>
+                    setForm({ ...form, pack_size: e.target.value })
+                  }
+                  placeholder="p.ej. 10"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Unidad del contenido
+                </label>
+                <input
+                  type="text"
+                  value={form.pack_unit}
+                  onChange={(e) =>
+                    setForm({ ...form, pack_unit: e.target.value })
+                  }
+                  placeholder="kg, pza..."
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                 />
               </div>

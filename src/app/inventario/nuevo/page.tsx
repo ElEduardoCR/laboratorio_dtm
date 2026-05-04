@@ -15,6 +15,8 @@ export default function NuevoItem() {
   const [unit, setUnit] = useState("pza");
   const [supplier, setSupplier] = useState("");
   const [supplierQty, setSupplierQty] = useState("");
+  const [packSize, setPackSize] = useState("");
+  const [packUnit, setPackUnit] = useState("");
   const [price, setPrice] = useState("");
   const [isHipoclorito, setIsHipoclorito] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -34,6 +36,8 @@ export default function NuevoItem() {
       unit,
       supplier: supplier.trim() || null,
       supplier_qty: supplierQty ? Number(supplierQty) : null,
+      pack_size: packSize ? Number(packSize) : null,
+      pack_unit: packUnit.trim() || null,
       price: Number(price),
       current_qty: 0,
       is_hipoclorito: isHipoclorito,
@@ -152,6 +156,39 @@ export default function NuevoItem() {
               placeholder="p.ej. 10"
             />
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Contenido por paquete
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={packSize}
+              onChange={(e) => setPackSize(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2"
+              placeholder="p.ej. 10"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Unidad del contenido
+            </label>
+            <input
+              type="text"
+              value={packUnit}
+              onChange={(e) => setPackUnit(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2"
+              placeholder="kg, pza..."
+            />
+          </div>
+          <p className="col-span-2 text-xs text-gray-500 -mt-1">
+            Opcional. Ej.: 1 paquete contiene 10 kg de grava, o 10 piezas de
+            o-rings. Solo informativo.
+          </p>
         </div>
 
         <label className="flex items-start gap-3 cursor-pointer border border-gray-200 rounded-xl p-3">
