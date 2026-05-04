@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/utils/supabase/client";
+import { useAuth, usePermission } from "@/context/AuthContext";
 import {
   ArrowLeft,
   Box,
@@ -12,6 +13,8 @@ import {
   ArrowUp,
   Droplet,
   Activity,
+  Pencil,
+  History,
 } from "lucide-react";
 
 type Item = {
@@ -48,36 +51,209 @@ type Usage = {
   pozo?: { identifier: string } | null;
 };
 
+type AdjChange = { field: string; old: unknown; new: unknown };
+type Adjustment = {
+  id: string;
+  reason: string;
+  changes: AdjChange[];
+  actor_id: string | null;
+  created_at: string;
+  actor?: { full_name: string } | null;
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  sku: "SKU",
+  description: "Descripción",
+  unit: "Unidad",
+  supplier: "Proveedor",
+  supplier_qty: "Cantidad por pedido",
+  price: "Precio unitario",
+  current_qty: "Existencia",
+};
+
 export default function InventarioDetalle() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const { session } = useAuth();
+  const canAdjust = usePermission("inventory.in");
+
   const [item, setItem] = useState<Item | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [usages, setUsages] = useState<Usage[]>([]);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const [showEdit, setShowEdit] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [form, setForm] = useState({
+    sku: "",
+    description: "",
+    unit: "",
+    supplier: "",
+    supplier_qty: "",
+    price: "",
+    current_qty: "",
+    reason: "",
+  });
+
+  const load = async () => {
     if (!id) return;
-    (async () => {
-      const [i, e, u] = await Promise.all([
-        supabase.from("inventory_items").select("*").eq("id", id).single(),
-        supabase
-          .from("inventory_entries")
-          .select("*")
-          .eq("item_id", id)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("inventory_usages")
-          .select("*, poi:poi_id(name), pozo:pozo_id(identifier)")
-          .eq("item_id", id)
-          .order("created_at", { ascending: false }),
-      ]);
-      setItem((i.data as Item) || null);
-      setEntries((e.data as Entry[]) || []);
-      setUsages((u.data as Usage[]) || []);
-      setLoading(false);
-    })();
+    const [i, e, u, a] = await Promise.all([
+      supabase.from("inventory_items").select("*").eq("id", id).single(),
+      supabase
+        .from("inventory_entries")
+        .select("*")
+        .eq("item_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("inventory_usages")
+        .select("*, poi:poi_id(name), pozo:pozo_id(identifier)")
+        .eq("item_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("inventory_adjustments")
+        .select("*")
+        .eq("item_id", id)
+        .order("created_at", { ascending: false }),
+    ]);
+    const it = (i.data as Item) || null;
+    setItem(it);
+    setEntries((e.data as Entry[]) || []);
+    setUsages((u.data as Usage[]) || []);
+
+    const adjs = (a.data as Adjustment[]) || [];
+    const actorIds = Array.from(
+      new Set(adjs.map((x) => x.actor_id).filter(Boolean))
+    ) as string[];
+    if (actorIds.length) {
+      const { data: profs } = await supabase
+        .from("user_profiles")
+        .select("id, full_name")
+        .in("id", actorIds);
+      const byId = new Map(
+        ((profs as { id: string; full_name: string }[]) || []).map((p) => [
+          p.id,
+          p.full_name,
+        ])
+      );
+      adjs.forEach((adj) => {
+        if (adj.actor_id) {
+          const name = byId.get(adj.actor_id);
+          adj.actor = name ? { full_name: name } : null;
+        }
+      });
+    }
+    setAdjustments(adjs);
+
+    if (it) {
+      setForm({
+        sku: it.sku,
+        description: it.description,
+        unit: it.unit,
+        supplier: it.supplier || "",
+        supplier_qty: it.supplier_qty?.toString() || "",
+        price: it.price.toString(),
+        current_qty: it.current_qty.toString(),
+        reason: "",
+      });
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
   }, [id]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!item || busy) return;
+    setFormError("");
+
+    if (!form.sku.trim() || !form.description.trim() || !form.unit.trim()) {
+      setFormError("SKU, descripción y unidad son obligatorios.");
+      return;
+    }
+    if (!form.reason.trim()) {
+      setFormError("Indica el motivo del ajuste.");
+      return;
+    }
+    const priceNum = parseFloat(form.price || "0");
+    const qtyNum = parseFloat(form.current_qty || "0");
+    const supQtyNum = form.supplier_qty
+      ? parseFloat(form.supplier_qty)
+      : null;
+    if (isNaN(priceNum) || priceNum < 0) {
+      setFormError("Precio inválido.");
+      return;
+    }
+    if (isNaN(qtyNum) || qtyNum < 0) {
+      setFormError("Existencia inválida.");
+      return;
+    }
+
+    const next = {
+      sku: form.sku.trim(),
+      description: form.description.trim(),
+      unit: form.unit.trim(),
+      supplier: form.supplier.trim() || null,
+      supplier_qty: supQtyNum,
+      price: priceNum,
+      current_qty: qtyNum,
+    };
+    const prev = {
+      sku: item.sku,
+      description: item.description,
+      unit: item.unit,
+      supplier: item.supplier,
+      supplier_qty: item.supplier_qty,
+      price: Number(item.price),
+      current_qty: Number(item.current_qty),
+    };
+
+    const changes: AdjChange[] = [];
+    (Object.keys(next) as (keyof typeof next)[]).forEach((k) => {
+      const a = prev[k];
+      const b = next[k];
+      const aN = a === null || a === undefined ? null : a;
+      const bN = b === null || b === undefined ? null : b;
+      if (aN !== bN) changes.push({ field: k, old: aN, new: bN });
+    });
+
+    if (changes.length === 0) {
+      setFormError("No hay cambios que guardar.");
+      return;
+    }
+
+    setBusy(true);
+    const { error: upErr } = await supabase
+      .from("inventory_items")
+      .update({ ...next, updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    if (upErr) {
+      setFormError(upErr.message);
+      setBusy(false);
+      return;
+    }
+    await supabase.from("inventory_adjustments").insert({
+      item_id: item.id,
+      actor_id: session?.user.id || null,
+      reason: form.reason.trim(),
+      changes,
+    });
+    setShowEdit(false);
+    setBusy(false);
+    load();
+  };
+
+  const formatVal = (field: string, v: unknown) => {
+    if (v === null || v === undefined || v === "") return "—";
+    if (field === "price") return `$${Number(v).toFixed(2)}`;
+    if (field === "current_qty" || field === "supplier_qty") {
+      return `${v}`;
+    }
+    return String(v);
+  };
 
   if (loading) {
     return (
@@ -129,13 +305,163 @@ export default function InventarioDetalle() {
               </p>
             )}
           </div>
-          <Link
-            href="/inventario/entrada"
-            className="text-xs font-semibold bg-green-50 text-green-700 hover:bg-green-100 px-3 py-1.5 rounded-lg"
-          >
-            + Entrada
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {canAdjust && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEdit((v) => !v);
+                  setFormError("");
+                }}
+                className="text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"
+              >
+                <Pencil className="w-3 h-3" />
+                {showEdit ? "Cancelar" : "Editar / Ajustar"}
+              </button>
+            )}
+            <Link
+              href="/inventario/entrada"
+              className="text-xs font-semibold bg-green-50 text-green-700 hover:bg-green-100 px-3 py-1.5 rounded-lg"
+            >
+              + Entrada
+            </Link>
+          </div>
         </div>
+
+        {showEdit && canAdjust && (
+          <form
+            onSubmit={handleSubmit}
+            className="mt-4 border-t border-gray-100 pt-4 space-y-3"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  SKU
+                </label>
+                <input
+                  type="text"
+                  value={form.sku}
+                  onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Unidad
+                </label>
+                <input
+                  type="text"
+                  value={form.unit}
+                  onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  placeholder="kg, l, pz..."
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Descripción
+                </label>
+                <input
+                  type="text"
+                  value={form.description}
+                  onChange={(e) =>
+                    setForm({ ...form, description: e.target.value })
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Proveedor
+                </label>
+                <input
+                  type="text"
+                  value={form.supplier}
+                  onChange={(e) =>
+                    setForm({ ...form, supplier: e.target.value })
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Cantidad por pedido
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={form.supplier_qty}
+                  onChange={(e) =>
+                    setForm({ ...form, supplier_qty: e.target.value })
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Precio unitario ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Existencia ({item.unit})
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={form.current_qty}
+                  onChange={(e) =>
+                    setForm({ ...form, current_qty: e.target.value })
+                  }
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Motivo del ajuste <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                rows={2}
+                value={form.reason}
+                onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                placeholder="Ej. Conteo físico, corrección de captura, merma..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none"
+              />
+            </div>
+            {formError && (
+              <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                {formError}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowEdit(false)}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={busy}
+                className="flex-1 px-3 py-2 bg-dtm-blue text-white rounded-xl text-sm font-semibold hover:bg-blue-800 disabled:opacity-50"
+              >
+                {busy ? "Guardando..." : "Guardar ajuste"}
+              </button>
+            </div>
+          </form>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Metric label="Existencia" value={`${item.current_qty} ${item.unit}`} />
           <Metric
@@ -264,6 +590,60 @@ export default function InventarioDetalle() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      <h2 className="text-lg font-semibold text-gray-800 mt-8 mb-3 flex items-center gap-2">
+        <History className="w-4 h-4 text-amber-600" />
+        Ajustes ({adjustments.length})
+      </h2>
+      {adjustments.length === 0 ? (
+        <div className="bg-white rounded-2xl p-6 border border-gray-100 text-center text-sm text-gray-400">
+          Sin ajustes registrados.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {adjustments.map((a) => (
+            <div
+              key={a.id}
+              className="bg-white rounded-xl p-4 border border-gray-100 text-sm"
+            >
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <p className="text-xs text-gray-500">
+                  {new Date(a.created_at).toLocaleString("es-MX", {
+                    timeZone: "America/Mexico_City",
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                  {a.actor?.full_name && (
+                    <span className="ml-2 text-gray-700">
+                      · {a.actor.full_name}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <p className="text-sm text-gray-700 italic mb-2">{a.reason}</p>
+              <div className="space-y-1">
+                {(a.changes || []).map((c, idx) => (
+                  <p
+                    key={idx}
+                    className="text-xs text-gray-600 font-mono break-words"
+                  >
+                    <span className="font-semibold text-gray-800">
+                      {FIELD_LABELS[c.field] || c.field}:
+                    </span>{" "}
+                    <span className="text-red-600 line-through">
+                      {formatVal(c.field, c.old)}
+                    </span>{" "}
+                    →{" "}
+                    <span className="text-green-700">
+                      {formatVal(c.field, c.new)}
+                    </span>
+                  </p>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
