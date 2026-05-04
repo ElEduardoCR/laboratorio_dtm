@@ -41,7 +41,6 @@ function getNextWeekStartMexicoCity(): string {
 
 type MediaKey =
   | "coin_clean_photo"
-  | "coin_collection_photo"
   | "salt_photo"
   | "tank_input_video"
   | "tank_output_video"
@@ -84,7 +83,6 @@ export default function RevisionSemanal() {
   const [form, setForm] = useState({
     salt_supplied_kg: "",
     salt_emptied_kg: "",
-    collection_amount: "",
     multimedia_filter_status: "" as Status,
     carbon_filter_status: "" as Status,
     resin_filter_status: "" as Status,
@@ -94,7 +92,6 @@ export default function RevisionSemanal() {
 
   const [media, setMedia] = useState<Record<MediaKey, File | null>>({
     coin_clean_photo: null,
-    coin_collection_photo: null,
     salt_photo: null,
     tank_input_video: null,
     tank_output_video: null,
@@ -109,7 +106,6 @@ export default function RevisionSemanal() {
 
   const [previews, setPreviews] = useState<Record<MediaKey, string>>({
     coin_clean_photo: "",
-    coin_collection_photo: "",
     salt_photo: "",
     tank_input_video: "",
     tank_output_video: "",
@@ -124,7 +120,6 @@ export default function RevisionSemanal() {
 
   const fileInputRefs = useRef<Record<MediaKey, HTMLInputElement | null>>({
     coin_clean_photo: null,
-    coin_collection_photo: null,
     salt_photo: null,
     tank_input_video: null,
     tank_output_video: null,
@@ -293,16 +288,12 @@ export default function RevisionSemanal() {
         is_operational: true,
         salt_supplied_kg: parseFloat(form.salt_supplied_kg),
         salt_emptied_kg: parseFloat(form.salt_emptied_kg),
-        collection_amount: form.collection_amount
-          ? parseFloat(form.collection_amount)
-          : null,
         multimedia_filter_status: form.multimedia_filter_status,
         carbon_filter_status: form.carbon_filter_status,
         resin_filter_status: form.resin_filter_status,
         bigblue_filter_status: form.bigblue_filter_status,
         observations: form.observations.trim() || null,
         coin_clean_photo: mediaUrls.coin_clean_photo,
-        coin_collection_photo: mediaUrls.coin_collection_photo,
         salt_photo: mediaUrls.salt_photo,
         tank_input_video: mediaUrls.tank_input_video,
         tank_output_video: mediaUrls.tank_output_video,
@@ -525,7 +516,7 @@ export default function RevisionSemanal() {
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm text-amber-800">
                 <strong>Instrucciones:</strong> Limpia el sistema de monedas y
                 verifica su correcto funcionamiento. Sube una foto que evidencie
-                la limpieza y otra de la recaudación obtenida.
+                la limpieza.
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <MediaInput
@@ -539,50 +530,10 @@ export default function RevisionSemanal() {
                     fileInputRefs.current.coin_clean_photo = el;
                   }}
                 />
-                <MediaInput
-                  fieldKey="coin_collection_photo"
-                  label="Foto: Recaudación"
-                  type="image"
-                  preview={previews.coin_collection_photo}
-                  onFileChange={(f) =>
-                    handleMediaChange("coin_collection_photo", f)
-                  }
-                  onRemove={() => removeMedia("coin_collection_photo")}
-                  inputRef={(el) => {
-                    fileInputRefs.current.coin_collection_photo = el;
-                  }}
-                />
               </div>
-              <div className="mt-4">
-                <label
-                  htmlFor="collection_amount"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Monto recaudado (MXN)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                    $
-                  </span>
-                  <input
-                    id="collection_amount"
-                    name="collection_amount"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    inputMode="decimal"
-                    value={form.collection_amount}
-                    onChange={(e) =>
-                      setForm({ ...form, collection_amount: e.target.value })
-                    }
-                    placeholder="0.00"
-                    className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Dinero retirado del monedero esta semana.
-                </p>
-              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                Nota: la recaudación ahora se registra en la revisión diaria.
+              </p>
             </Section>
 
             {/* 2. Revisión de Sal */}

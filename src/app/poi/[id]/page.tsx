@@ -41,6 +41,8 @@ type Review = {
   photo_chlorine_output: string | null;
   photo_hardness_input: string | null;
   photo_hardness_output: string | null;
+  collection_amount: number | null;
+  coin_collection_photo: string | null;
   created_at: string;
   signed_by: string | null;
   signer?: { full_name: string } | null;
@@ -615,6 +617,15 @@ export default function POIDetail() {
                         {r.cylinder_weight !== null && (
                           <span>Cilindro: {r.cylinder_weight} KG</span>
                         )}
+                        {r.collection_amount !== null && (
+                          <span>
+                            Recaudación: $
+                            {Number(r.collection_amount).toLocaleString(
+                              "es-MX",
+                              { minimumFractionDigits: 2 }
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
                     {isExpanded ? (
@@ -696,6 +707,10 @@ export default function POIDetail() {
                               {
                                 url: r.photo_hardness_output,
                                 label: "Dureza S",
+                              },
+                              {
+                                url: r.coin_collection_photo,
+                                label: "Recaudación",
                               },
                             ].map(
                               (photo) =>

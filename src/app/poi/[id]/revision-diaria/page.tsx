@@ -41,8 +41,22 @@ export default function RevisionDiaria() {
     chlorine_output: "",
     hardness_input: "",
     hardness_output: "",
+    collection_amount: "",
     observations: "",
   });
+
+  const [coinPhoto, setCoinPhoto] = useState<File | null>(null);
+  const [coinPreview, setCoinPreview] = useState<string>("");
+  const coinInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleCoinPhotoChange = (file: File | null) => {
+    setCoinPhoto(file);
+    setCoinPreview(file ? URL.createObjectURL(file) : "");
+  };
+  const removeCoinPhoto = () => {
+    handleCoinPhotoChange(null);
+    if (coinInputRef.current) coinInputRef.current.value = "";
+  };
 
   const [photos, setPhotos] = useState<Record<PhotoField, File | null>>({
     photo_chlorine_input: null,
@@ -151,6 +165,16 @@ export default function RevisionDiaria() {
       return;
     if (!allPhotosAttached) return;
 
+    const collectionRaw = form.collection_amount.trim();
+    const collectionNum = collectionRaw ? parseFloat(collectionRaw) : null;
+    if (collectionRaw && (collectionNum === null || isNaN(collectionNum))) {
+      return;
+    }
+    if (collectionNum && collectionNum > 0 && !coinPhoto) {
+      // si declara monto, debe adjuntar foto
+      return;
+    }
+
     setSaving(true);
     const todayStr = getTodayMexicoCity();
 
@@ -169,6 +193,26 @@ export default function RevisionDiaria() {
       }
     }
 
+    let coinPhotoUrl: string | null = null;
+    if (coinPhoto) {
+      const ext = coinPhoto.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${poiId}/${todayStr}/coin_collection_photo.${ext}`;
+      const up = await supabase.storage
+        .from("review-photos")
+        .upload(path, coinPhoto, {
+          upsert: true,
+          contentType: coinPhoto.type || "image/jpeg",
+        });
+      if (up.error) {
+        setSaving(false);
+        return;
+      }
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("review-photos").getPublicUrl(path);
+      coinPhotoUrl = publicUrl;
+    }
+
     const { error } = await supabase.from("daily_reviews").insert([
       {
         poi_id: poiId,
@@ -184,6 +228,8 @@ export default function RevisionDiaria() {
         photo_chlorine_output: photoUrls.photo_chlorine_output,
         photo_hardness_input: photoUrls.photo_hardness_input,
         photo_hardness_output: photoUrls.photo_hardness_output,
+        collection_amount: collectionNum,
+        coin_collection_photo: coinPhotoUrl,
       },
     ]);
 
@@ -425,6 +471,60 @@ export default function RevisionDiaria() {
                     onRemove={() => removePhoto("photo_hardness_output")}
                     inputRef={(el) => {
                       fileInputRefs.current.photo_hardness_output = el;
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Recaudación (opcional) */}
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                Recaudación (opcional)
+              </h2>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm text-amber-800">
+                Si hoy retiraste dinero del monedero, registra el monto y
+                adjunta la foto de las monedas. Puedes dejarlo en blanco si no
+                hubo recaudación.
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label
+                    htmlFor="collection_amount"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Monto recaudado (MXN)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      $
+                    </span>
+                    <input
+                      id="collection_amount"
+                      name="collection_amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      inputMode="decimal"
+                      value={form.collection_amount}
+                      onChange={handleChange}
+                      placeholder="0.00"
+                      className="w-full border border-gray-300 rounded-lg pl-7 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Foto recaudación
+                  </label>
+                  <PhotoInput
+                    fieldKey="coin_collection_photo"
+                    preview={coinPreview}
+                    onFileChange={handleCoinPhotoChange}
+                    onRemove={removeCoinPhoto}
+                    inputRef={(el) => {
+                      coinInputRef.current = el;
                     }}
                   />
                 </div>

@@ -26,7 +26,6 @@ type WR = {
   poi_id: string;
   review_date: string;
   collection_amount: number | null;
-  is_operational: boolean;
 };
 
 function fmt(n: number) {
@@ -63,19 +62,29 @@ export default function Recaudacion() {
 
   useEffect(() => {
     (async () => {
-      const [p, r] = await Promise.all([
+      const [p, dr, wr] = await Promise.all([
         supabase
           .from("poi")
           .select("id, name, location, is_operational")
           .order("name"),
         supabase
+          .from("daily_reviews")
+          .select("id, poi_id, review_date, collection_amount")
+          .not("collection_amount", "is", null)
+          .order("review_date", { ascending: false }),
+        // Legacy: revisiones semanales antiguas que aún tienen recaudación
+        supabase
           .from("weekly_reviews")
-          .select("id, poi_id, review_date, collection_amount, is_operational")
+          .select("id, poi_id, review_date, collection_amount")
           .not("collection_amount", "is", null)
           .order("review_date", { ascending: false }),
       ]);
       setPois((p.data as Poi[]) || []);
-      setReviews((r.data as WR[]) || []);
+      const merged = [
+        ...(((dr.data as WR[]) || [])),
+        ...(((wr.data as WR[]) || [])),
+      ].sort((a, b) => (a.review_date < b.review_date ? 1 : -1));
+      setReviews(merged);
       setLoading(false);
     })();
   }, []);
@@ -199,8 +208,8 @@ export default function Recaudacion() {
           Recaudación
         </h1>
         <p className="text-gray-500 mt-1">
-          Resumen semanal y mensual basado en las revisiones semanales de cada
-          planta.
+          Resumen semanal y mensual basado en las recaudaciones registradas
+          en la revisión diaria de cada planta.
         </p>
       </div>
 
@@ -279,7 +288,7 @@ export default function Recaudacion() {
             {stats.pendingPois.map((p) => (
               <Link
                 key={p.id}
-                href={`/poi/${p.id}/revision-semanal`}
+                href={`/poi/${p.id}/revision-diaria`}
                 className="inline-flex items-center gap-1 text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-full hover:bg-amber-100"
               >
                 {p.name}
